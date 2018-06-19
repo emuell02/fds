@@ -68,6 +68,7 @@ end
 
 % Read in global plot options
 plot_style
+Font_Interpreter = 'LaTeX';
 
 % Read configuration file
 A = importdata(Dataplot_Inputs_File);
@@ -128,7 +129,7 @@ for i=2:n_plots
         itest = ismember(i,drange);
     else
         itest = strcmp(parameters(dataname_col),dstring);
-        if itest
+        if any(itest)
             drange_index = drange_index + 1;
             drange(drange_index) = i;
         end
@@ -143,7 +144,7 @@ for i=2:n_plots
     % Check to see if f line has been activated in configuration file
     ftest = strcmp(parameters(strcmp(headers,'switch_id')),'f'); % used for multiple lines on same plot
 
-    if itest && (dtest || otest || ftest)
+    if any(itest) && (dtest || otest || ftest)
 
         if ~ftest
             if exist('K')
@@ -236,6 +237,7 @@ for i=2:n_plots
                     compare_indices = sscanf(Metric, ['end_' '%f' '_' '%f']);
                     if compare_indices(1) == j
                         Save_Measured_Metric(i,1,1) = M(indices(end),d1_Dep_Col)-d1_Initial_Value;
+                        Save_Measured_Quantity(i,1) = S1(j);
                         using_stat_x_y_check_zero = 1;
                     end
                 else
@@ -351,6 +353,7 @@ for i=2:n_plots
                     compare_indices = sscanf(Metric, ['end_' '%f' '_' '%f']);
                     if compare_indices(2) == j
                         Save_Predicted_Metric(i,1,1) = M_Dep(end)-d2_Initial_Value;
+                        Save_Predicted_Quantity(i,1) = S2(j);
                         using_stat_x_y_check_zero = 1;
                     end
                 else
@@ -504,6 +507,7 @@ for i=2:n_plots
             PDF_Paper_Width = Paper_Width_Factor*Paper_Width;
 
             set(gcf,'Visible',Figure_Visibility);
+            set(gcf,'PaperUnits',Paper_Units);
             set(gcf,'Units',Paper_Units);
             set(gcf,'PaperSize',[PDF_Paper_Width Paper_Height]);
             set(gcf,'Position',[0 0 PDF_Paper_Width Paper_Height]);

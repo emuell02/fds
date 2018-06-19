@@ -36,7 +36,7 @@ the loss term.  Additionally, the pressure difference between two nodes in the n
 nodes coupled to that duct either directly (part of the same duct network) or indirectly (connected to the same compartment as another duct network).
 Solving the momentum equation, requires accounting for both of these.  This is done with the following discretization:
 \be u^{n+1}_j=u^{n}_j + \frac{\Delta t^n}{\rho_j L_j} \left[ \left(\tilde{p}^n_i - \tilde{p}^n_k\right)+\left(\rho g \Delta z\right)^{n}_j+\Delta p^{n}_j -
-   \frac{1}{2}K_j \rho_j \left(\left|u^{n-}_j+u^{n+}_j\right|u^n-\left|u^{n+}_j \right|u^{n-}_j \right) \right] \label{HVACdiscretemomentum} \ee
+   \frac{1}{2}K_j \rho_j \left(\left|u^{n-}_j+u^{n+}_j\right|u^n_j-\left|u^{n+}_j \right|u^{n-}_j \right) \right] \label{HVACdiscretemomentum} \ee
 The superscripts $n+$ and $n-$ on the velocity are used to linearize the flow loss in a duct to avoid a non-linear differential equation for velocity.
 The $n+$ superscript is the prior iteration value and the $n-$ is either the prior iteration value or zero if flow reversal occurred between iterations.
 This approach is used to speed convergence when duct flows are near zero to avoid large changes in $K$ if the forward and reverse losses are markedly different.
@@ -112,7 +112,7 @@ where $D$ is the duct diameter.  $f$ is determined from the Colebrook equation. 
 \ee
 where $\epsilon$ is the absolute roughness of the duct.
 
-\subsection{Heating and Coiling Coils}
+\subsection{Heating and Cooling Coils}
 
 A duct can contain a heating or cooling coil.  These either add or remove heat from the mass flowing in a duct.  This enthalpy change is then added to the duct enthalpy flow at the downstream node prior to computing the node temperature.  Two models are available.  The first model is a constant heat model that adds or removes heat at a fixed rate as long as the coil is operating.  The second model is an effectiveness type heat exchanger model in which four parameters are specified: the enthalpy of the working fluid ($c_{p,\text{\tiny fl}}$), the temperature of the working fluid, ($T_\text{\tiny fl}$), the mass flow rate of the working fluid ($\dot{m}_\text{\tiny fl}$), and the effectiveness ($\eta$).  The rate of enthalpy change is then computed as follows:
 
@@ -125,6 +125,8 @@ A duct can contain a heating or cooling coil.  These either add or remove heat f
 
 With rare exceptions, walls, floors, and ceilings are not air tight.  Gaps around windows and doors and openings for electrical, mechanical, and other systems provide small flow paths through obstructions.  These flow paths can be modeled as an equivalent HVAC system where each leakage path is a single duct.  The area of the duct is total leakage area and the terminal nodes of the duct can be considered the entire area of the surfaces defined as participating in that flow path.
 
+
+\newpage
 \section{Coupling the HVAC solver to FDS}
 
 \subsection{Boundary Conditions for the HVAC Solver}

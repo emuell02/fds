@@ -11,6 +11,7 @@ $RUNSMV -d Flowfields symmetry_test_mpi
 $RUNSMV -d Flowfields jet_fan
 $RUNSMV -d Flowfields velocity_bc_test
 $RUNSMV -d Heat_Transfer ht3d_ibeam
+$RUNSMV -d Heat_Transfer ht3d_sphere_51
 $RUNSMV -d HVAC HVAC_mass_conservation
 $RUNSMV -d HVAC HVAC_energy_pressure
 $RUNSMV -d HVAC leak_test_2
@@ -27,6 +28,9 @@ $RUNSMV -d HVAC leak_test_2
 # $RUNSMV -d Immersed_Boundary_Method tri_cube_cut_cell_test_11
 # $RUNSMV -d Immersed_Boundary_Method tri_cube_cut_cell_test_12
 $RUNSMV -d Miscellaneous pyramid
+$RUNSMV -d Miscellaneous obst_sphere
+$RUNSMV -d Miscellaneous obst_cylinder
+$RUNSMV -d Miscellaneous obst_cone
 $RUNSMV -d NS_Analytical_Solution ns2d_64
 $RUNSMV -d Pressure_Effects pressure_boundary
 $RUNSMV -d Pressure_Solver dancing_eddies_tight

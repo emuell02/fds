@@ -4,6 +4,7 @@
 # be sure to include the data set in ~/FDS-SMV/Validation/Process_All_Output.sh
 
 cd Beyler_Hood; ./Run_All.sh -y; cd ..
+cd Bittern_Sprinkler_Experiments; ./Run_All.sh -y; cd ..
 cd BRE_Spray; ./Run_All.sh -y; cd ..
 cd Bryant_Doorway; ./Run_All.sh -y; cd ..
 cd CAROLFIRE; ./Run_All.sh -y; cd ..
@@ -13,7 +14,6 @@ cd FAA_Polymers; ./Run_All.sh -y; cd ..
 cd Fleury_Heat_Flux; ./Run_All.sh -y; cd ..
 cd FM_Parallel_Panels; ./Run_All.sh -y; cd ..
 cd Hamins_Gas_Burners; ./Run_All.sh -y; cd ..
-cd Heated_Channel_Flow; ./Run_All.sh -y; cd ..
 cd Heskestad_Flame_Height; ./Run_All.sh -y; cd ..
 cd LEMTA_Spray; ./Run_All.sh -y; cd ..
 cd LLNL_Enclosure; ./Run_All.sh -y; cd ..
@@ -33,6 +33,7 @@ cd UL_NIST_Vents; ./Run_All.sh -y; cd ..
 cd Ulster_SBI; ./Run_All.sh -y; cd ..
 cd UMD_Polymers; ./Run_All.sh -y; cd ..
 cd USCG_HAI; ./Run_All.sh -y; cd ..
+cd Vegetation; ./Run_All.sh -y; cd ..
 cd Vettori_Flat_Ceiling; ./Run_All.sh -y; cd ..
 cd Vettori_Sloped_Ceiling; ./Run_All.sh -y; cd ..
 cd VTT_Sprays; ./Run_All.sh -y; cd ..

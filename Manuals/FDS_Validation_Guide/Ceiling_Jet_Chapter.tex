@@ -2,7 +2,7 @@
 
 \chapter{Ceiling Jets and Device Activation}
 
-FDS is a computational fluid dynamics (CFD) model and has no specific ceiling jet algorithm. Rather, temperatures throughout the fire compartment are computed directly from the governing conservation equations. Nevertheless, temperature measurements near the ceiling are useful in evaluating the model's ability to predict the activation times of sprinklers, smoke detectors, and other fire protection devices. The term ``ceiling jet'' is used loosely here -- it distinguishes a point temperature measurement near the ceiling from an average ``hot gas layer'' (HGL) temperature.
+FDS is a CFD-based fire model and has no specific ceiling jet algorithm. Rather, temperatures throughout the fire compartment are computed directly from the governing conservation equations. Nevertheless, temperature measurements near the ceiling are useful in evaluating the model's ability to predict the activation times of sprinklers, smoke detectors, and other fire protection devices. The term ``ceiling jet'' is used loosely here -- it distinguishes a point temperature measurement near the ceiling from an average ``hot gas layer'' (HGL) temperature.
 
 This chapter first presents comparisons of model predictions and temperature measurements near to the ceiling. Next, predicted sprinkler activation times and the total number of activations are compared with measurements. Finally, predicted smoke detector activation times are compared with measurements.
 
@@ -482,6 +482,93 @@ has been chosen to evaluate the ceiling jet temperature prediction.
 \label{NIST_NRC_Jet_Open}
 \end{figure}
 
+\clearpage
+
+\subsection{NIST/NRC Corner Effects Experiments}
+
+The plots on the following pages compare ceiling jet temperatures at two locations in a large compartment where corner, wall, and cabinet effects experiments were conducted. The corner and wall experiments involved a 60~cm by 60~cm natural gas burner with heat release rates of 200~kW, 300~kW, and 400~kW. The burner was either set in a corner or against a wall. The cabinet experiments involved gas burners set in one of two mock steel cabinets, with a variety of heat release rates.
+
+In all experiments, two vertical thermocouple arrays were placed along the centerline of the room, each one-third of the room length from each respective short wall. The arrays each had 13 bare-bead thermocouples. The first was 2~cm below the ceiling, used to measure the ceiling jet temperature.
+
+\newpage
+
+\begin{figure}[p]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/corner_200_kW_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/wall_200_kW_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/corner_300_kW_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/wall_300_kW_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/corner_400_kW_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/wall_400_kW_Ceiling_Jet}
+\end{tabular*}
+\caption[NIST/NRC Corner Effects experiments, ceiling jet temperature]
+{NIST/NRC Corner Effects experiments, ceiling jet temperature, wall and corner tests.}
+\label{NIST_NRC_Corner_Ceiling_Jet_1}
+\end{figure}
+
+\begin{figure}[p]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_01_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_02_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_03_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_04_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_05_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_06_Ceiling_Jet}
+\end{tabular*}
+\caption[NIST/NRC Corner Effects experiments, ceiling jet temperature, large cabinet]
+{NIST/NRC Corner Effects experiments, ceiling jet temperature, large cabinet.}
+\label{NIST_NRC_Corner_Ceiling_Jet_2}
+\end{figure}
+
+\begin{figure}[p]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_07_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_08_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_09_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_10_Ceiling_Jet} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_11_Ceiling_Jet} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_NRC_Corner_Effects/cabinet_12_Ceiling_Jet}
+\end{tabular*}
+\caption[NIST/NRC Corner Effects experiments, ceiling jet temperature, medium-sized cabinet]
+{NIST/NRC Corner Effects experiments, ceiling jet temperature, medium-sized cabinet.}
+\label{NIST_NRC_Corner_Ceiling_Jet_3}
+\end{figure}
+
+
+\clearpage
+
+\subsection{NIST Vent Study}
+
+These experiments were performed in a small-scale two floor enclosure, with each floor connected by one or two ceiling vents. Each floor contained a vertical array of eight sheathed thermocouples; the uppermost being 5~cm below the ceiling.
+
+\begin{figure}[!h]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_01_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_02_Ceiling_Jet_Temp} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_03_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_04_Ceiling_Jet_Temp} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_05_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_06_Ceiling_Jet_Temp}
+\end{tabular*}
+\caption[NIST Vent Study, ceiling jet temperature, Tests 1-6]
+{NIST Vent Study, ceiling jet temperature, Tests 1-6.}
+\label{NIST_Vent_Study_Ceiling_Jet_1}
+\end{figure}
+
+\begin{figure}[!h]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_07_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_08_Ceiling_Jet_Temp} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_09_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_13_Ceiling_Jet_Temp} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_14_Ceiling_Jet_Temp} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/NIST_Vent_Study/Test_15_Ceiling_Jet_Temp}
+\end{tabular*}
+\caption[NIST Vent Study, ceiling jet temperature, Tests 7-9, 13-15]
+{NIST Vent Study, ceiling jet temperature, Tests 7-9, 13-15.}
+\label{NIST_Vent_Study_Ceiling_Jet_2}
+\end{figure}
+
 
 \clearpage
 
@@ -660,6 +747,26 @@ The primary purpose of the UL/NFPRF experiments was to measure sprinkler activat
 \end{tabular*}
 \caption{UL/NFPPRF experiments, ceiling jet, Series I, Tests 15-22.}
 \label{UL_NFPRF_jet_3}
+\end{figure}
+
+
+\clearpage
+
+\subsection{UL/NIJ House Experiments}
+
+The following plots compare the uppermost thermocouple measurements with corresponding model predictions. The instrument label, 5TC1, indicates the TC that is 1~cm below the ceiling in Room~5. The rooms are numbered as follows: (1) Bedroom~1, (2) Bedroom~2, (3) Bedroom~3, (4) Hallway, (5) Living Room, (6) Dining Room, (7 and 8) Kitchen.
+
+
+\begin{figure}[!h]
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/UL_NIJ_Houses/Single_Story_Gas_1_CJ_LR} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/UL_NIJ_Houses/Single_Story_Gas_2_CJ_LR} \\
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/UL_NIJ_Houses/Single_Story_Gas_3_CJ_LR} &
+\includegraphics[height=2.15in]{SCRIPT_FIGURES/UL_NIJ_Houses/Single_Story_Gas_4_CJ_LR} \\
+\multicolumn{2}{c}{\includegraphics[height=2.15in]{SCRIPT_FIGURES/UL_NIJ_Houses/Single_Story_Gas_5_CJ_LR} } \\
+\end{tabular*}
+\caption{UL/NIJ House experiments, ceiling jet, Single Story, Tests 1-5.}
+\label{UL_NIJ_jet}
 \end{figure}
 
 

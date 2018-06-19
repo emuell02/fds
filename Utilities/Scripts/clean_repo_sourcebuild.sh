@@ -12,10 +12,16 @@ git clean -dxf
 cd $GITROOT/fds/Build
 git clean -dxf
 
+cd $GITROOT/fds/Build/Bundle/uploads
+git clean -dxf
+
 cd $GITROOT/smv/Source
 git clean -dxf
 
 cd $GITROOT/smv/Build
+git clean -dxf
+
+cd $GITROOT/smv/Build/Bundle/uploads
 git clean -dxf
 
 cd $CURDIR
