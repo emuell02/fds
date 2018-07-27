@@ -2872,7 +2872,7 @@ ENDIF
 
 ! Update the 1-D heat transfer equation
 
-THERM_THIN: IF (PRESENT(PARTICLE_INDEX) .AND. NWP==1) THEN
+THERM_THIN: IF (PRESENT(PARTICLE_INDEX) .AND. NWP==1 .AND. TGA_PARTICLE_INDEX<0) THEN
    AERVE=(I_GRAD*(SF%INNER_RADIUS+SF%THICKNESS)**(I_GRAD-1))/ &
       (R_S(0)**I_GRAD-R_S(1)**I_GRAD)
    SIGMA_BETA = LP%PWT*ONE_D%AREA*RDX(ONE_D%IIG)*RDY(ONE_D%JJG)*RDZ(ONE_D%KKG)
@@ -2880,7 +2880,7 @@ THERM_THIN: IF (PRESENT(PARTICLE_INDEX) .AND. NWP==1) THEN
       ONE_D%EMISSIVITY*(0.25_EB*UII(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)-SIGMA*ONE_D%TMP_F**4))+Q_S(1))/RHOCBAR(1)
       !QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA)
    IF ((ONE_D%TMP_F+DTMP_VEG)<0._EB) THEN
-      PRINT*,ONE_D%RHO(1,:),DTMP_VEG,Q_S(1),AERVE*ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F),AERVE*QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA
+      PRINT*,TGA_PARTICLE_INDEX,DTMP_VEG,Q_S(1),AERVE*ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F),AERVE*QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA
    ENDIF
    ONE_D%TMP_F = ONE_D%TMP_F + DTMP_VEG
    ONE_D%TMP(0:NWP+1) = ONE_D%TMP(0:NWP+1) + DTMP_VEG
@@ -3145,7 +3145,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                NUCO2=(2._EB*NUO2-1._EB)
                NUCHAR=(1-SUM(ML%NU_RESIDUE(:,J))) !amount of char that is composed of reacting carbon
 
-               NUADJ(O2_INDEX)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
+               NUADJ(O2_INDEX+1)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
 
                ! Get oxygen mass fraction
                ZZ_GET(1:N_TRACKED_SPECIES) = MAX(0._EB,ZZ(IIG,JJG,KKG,1:N_TRACKED_SPECIES))
@@ -3155,38 +3155,27 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                RE_L   = RHO(IIG,JJG,KKG)*U_TANG*2._EB*SF%THICKNESS/MU_AIR
                ! compare available mass of char vs. oxygen for reaction
                ! currently operates under the assumption of single layer cylindrical particle
-               IF (RHO_S(N)*VPRVC .LT. RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX)) THEN
+               IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX+1)) THEN
                   REACTION_RATE = REACTION_RATE * &
                                RHO_S(N)*VPRVC*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
                ELSE
                   REACTION_RATE = REACTION_RATE * &
-                               RHO(IIG,JJG,KKG)*Y_O2*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX))
+                               RHO(IIG,JJG,KKG)*Y_O2*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
                ENDIF
                
-               !IF (ONE_D%TMP_F>1073._EB) THEN
-                  !REACTION_RATE = AERVE*(ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F)+ & 
-                     !ONE_D%EMISSIVITY*(0.25_EB*UII(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)-SIGMA*ONE_D%TMP_F**4))/(ML%H_R(J)*RHO_S0)
-                  !REACTION_RATE = MAX(0._EB, REACTION_RATE)
-               !ENDIF
-
-               !ELSEIF (ONE_D%TMP_F>800._EB .AND. ML%NU_O2(J)==0._EB) THEN !limit based on El Houssami
-                  !REACTION_RATE = AERVE*(ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F)+ &
-                     !QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA)/(ML%H_R(J)*RHO_S0)
-                  !REACTION_RATE = MAX(0._EB, REACTION_RATE)
-
                RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
 
                ! energy exchanges related to CO2
-               NUADJ(CO2_INDEX)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
-               Q_SML = RHO_DOT * NUADJ(CO2_INDEX)*0.5*-394.5_EB/44._EB*1E6_EB
+               NUADJ(CO2_INDEX+1)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
+               Q_SML = RHO_DOT * NUADJ(CO2_INDEX+1)*0.5*-394.5_EB/44._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - Q_SML
                CALL GET_SPECIFIC_HEAT(ZZ_GET,CP,TMP(IIG,JJG,KKG))
                D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*-Q_SML)/ &
                   (CP*TMP(IIG,JJG,KKG)*RHO(IIG,JJG,KKG))
 
                ! energy exchanges related to CO
-               NUADJ(CO_INDEX)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
-               Q_SML = RHO_DOT * NUADJ(CO_INDEX)*0.5*-110.5_EB/28._EB*1E6_EB
+               NUADJ(CO_INDEX+1)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
+               Q_SML = RHO_DOT * NUADJ(CO_INDEX+1)*0.5*-110.5_EB/28._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - Q_SML
                CALL GET_SPECIFIC_HEAT(ZZ_GET,CP,TMP(IIG,JJG,KKG))
                D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*-Q_SML)/ &
@@ -3194,7 +3183,15 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
 
             ENDIF
 
-           RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
+            !IF (ONE_D%TMP_F>800._EB .AND. ML%NU_O2(J)==0._EB) THEN !limit based on El Houssami
+               !REACTION_RATE = (AERVE*(ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F)+ &
+                  !ONE_D%EMISSIVITY*(0.25_EB*UII(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)-SIGMA*ONE_D%TMP_F**4))+Q_DOT_S_PPP)/(ML%H_R(J)*RHO_S0)
+               !REACTION_RATE = MAX(0._EB, REACTION_RATE)
+            !ENDIF
+            
+            RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
+
+
 
 !rm -> Impose maximum bound on pyrolysis generated fuel vapor creation kg/s/m^3 
 !if (n==1) print '(A,1x,1I3,3ES12.4)','N,RHO_S(N),DT_BC,RHO_S0*REACTION_RATE',n,rho_s(n),dt_bc,rho_s0*reaction_rate
