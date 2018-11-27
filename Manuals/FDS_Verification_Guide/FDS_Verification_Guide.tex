@@ -2002,7 +2002,7 @@ In order for species mass fractions to be physically realizable they must all be
 
 \section{Energy Conservation}
 
-FDS does not explicitly solve the energy conservation equation. Instead, mass transport equations are solved for the density and the $n-1$ independent gas species. Source terms from the energy equation are incorporated in the velocity  divergence, $\nabla \cdot \bu$, which is factored out of the sensible enthalpy transport equation, i.e.,
+FDS does not explicitly solve the energy conservation equation. Instead, mass transport equations are solved for the the $n$ independent gas species.  The density is found from summing the individual gas species densities, $\rho = \sum_\alpha \rho_\alpha$. Source terms from the energy equation are incorporated in the velocity  divergence, $\nabla \cdot \bu$, which is factored out of the sensible enthalpy transport equation, i.e.,
 \be
 \label{eqn_new_div}
 \nabla\cdot\mathbf{u} = \frac{1}{\rho h_{\rm s}} \left[ \frac{\mbox{D}}{\mbox{D} t}(\bar{p}-\rho h_{\rm s}) + \dot{q}^{\prime\prime\prime} + \nabla\cdot(k \nabla T) - \nabla\cdot\sum_\alpha h_{s,\alpha} \mathbf{J}_\alpha - \nabla\cdot\dot{\mathbf{q}}_r^{\prime\prime} + \dot{q}_b^{\prime\prime\prime} \right] \,\mbox{.}
@@ -2020,14 +2020,14 @@ Next, the same compartment with the same fire is now assumed to have cold (20~\s
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=.8\textwidth]{SCRIPT_FIGURES/energy_budget_adiabatic_walls}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/energy_budget_adiabatic_walls}
 \caption[The {\ct energy\_budget\_adiabatic\_walls} test case]{The energy budget for a simple compartment fire with adiabatic walls.}
 \label{energy_budget_adiabatic_walls_fig}
 \end{figure}
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=.8\textwidth]{SCRIPT_FIGURES/energy_budget_cold_walls}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/energy_budget_cold_walls}
 \caption[The {\ct energy\_budget\_cold\_walls} test case]{The energy budget for a simple compartment fire with cold walls.}
 \label{energy_budget_cold_walls_fig}
 \end{figure}
@@ -2140,14 +2140,14 @@ To obtain tight mass and energy balances it is important to output the actual va
 
 \begin{figure}[p]
 \begin{tabular*}{\textwidth}{lr}
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_massflow_in} &
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_massflow_out} \\
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_massflow_in_2} &
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_massflow_out_2} \\
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_heatflow_in} &
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_heatflow_out} \\
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_heatflow_in_2} &
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/wall_device_test_heatflow_out_2}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_massflow_in} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_massflow_out} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_massflow_in_2} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_massflow_out_2} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_heatflow_in} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_heatflow_out} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_heatflow_in_2} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/wall_device_test_heatflow_out_2}
 \end{tabular*}
 \caption[The \textct{mass\_heat\_wall\_device\_test} cases]{The \textct{mass\_heat\_wall\_device\_test} cases.}
 \label{mass_heat_wall_device}
@@ -2316,15 +2316,31 @@ OpenMP is used in FDS to sub-divide the work of the do-loops among multiple core
 \end{figure}
 
 
+\section{Multi-Mesh Layer Height Calculation (\texorpdfstring{\textct{layer}}{layer})}
+\label{layer}
+
+The test cases called {\ct Miscellaneous/layer\_1mesh.fds} and {\ct layer\_4mesh.fds} simulate a fire in a small compartment where the average smoke layer height and temperature are calculated. Figure~\ref{race_test_fig} displays the results for both cases. Note that the 4 mesh case is run on 3 MPI processes to ensure that the layer calculation works for an arbitrary number of meshes and MPI processes.
+
+\begin{figure}[!ht]
+\begin{tabular*}{\textwidth}{lr}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/layer_height} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/layer_temps}
+\end{tabular*}
+\caption[Result of the \textct{layer} test cases]{Average layer height (left) and temperatures (right) for simulations on 1 mesh and 4 meshes.}
+\label{layer_fig}
+\end{figure}
+
+
+
 
 \chapter{Thermal Radiation}
 
 There are numerous examples in the heat transfer literature of exact solutions, for simple configurations of hot and cold objects, of the radiation transport equation. This chapter presents a number of these examples, plus others aimed at assessing the influence of absorptive media.
 
-\section{Radiation from an Infinitely Long Plate (\texorpdfstring{\textct{plate\_view\_factor}}{plate\_view\_factor}) }
+\section{Radiation View Factors (\texorpdfstring{\textct{plate\_view\_factor}}{plate\_view\_factor}) }
 \label{plate_view_factor}
 
-This verification case tests the computation of radiative heat flux from a hot plate to a target surface 1~m away in different coordinate systems. The radiating surface is at 1000~\si{\degree C} and has an emissivity of 1.0.  The exact values are calculated using the analytical expressions for the view factors.
+These verification cases test the computation of radiative heat flux from a hot plate to a target surface 1~m away in different coordinate systems. The radiating surface is at 1000~\si{\degree C} and has an emissivity of 1.0.  The exact values are calculated using the analytical expressions for the view factors.
 \begin{center}
 \begin{tabular}{|l|l|c|}
 \hline Co-ordinates & Radiation source & Heat flux (kW/m$^2$)  \\ \hline \hline
@@ -2634,8 +2650,8 @@ The comparison of FDS and the exact solution is shown in Fig.~\ref{radiation_gas
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=3.2in]{FIGURES/radiation_gas_panel_configuration}
-\includegraphics[width=3.2in]{SCRIPT_FIGURES/radiation_gas_panel}
+\includegraphics[height=2.2in]{FIGURES/radiation_gas_panel_configuration}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/radiation_gas_panel}
 \caption[The \textct{radiation\_gas\_panel} case]{\emph{Left}: A radiant panel and target dA$_1$ located a distance $R$ from the panel on its center axis.  \emph{Right}: Comparison of FDS and the exact result.}
 \label{radiation_gas_panel_plot}
 \end{figure}
@@ -2845,7 +2861,7 @@ The reaction rate input parameters are shown in the table below. $E$, $a_{\alpha
 \caption[Arrhenius values for a single step CO reaction]{Arrhenius values for a single step CO reaction; $\alpha$ = [$\mathrm{CO}$ $\mathrm{O_2}$ $\mathrm{CO_2}$].}
 \label{single_step_co}
 \begin{tabular}{|l|l|l|l|l|l|l|l|l|}
-\hline Reaction & $\nu_{\alpha}$ & E (kJ/kmol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
+\hline Reaction & $\nu_{\alpha}$ & E (J/mol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
 \ref{eq:1step_CO} & [-1 -0.5 1] & 0 & 4.244e-6 & [0 0 0] & [0 0 0] \\ \hline
 \end{tabular}
 \end{center}
@@ -2862,7 +2878,7 @@ The second finite rate test case is a one-step, second-order propane reaction, E
 \caption[Arrhenius values for a single step C$_3$H$_8$ reaction]{Arrhenius values for a single step C$_3$H$_8$ reaction; $\alpha$ = [$\mathrm{C_3H_8}$ $\mathrm{O_2}$ $\mathrm{CO_2}$ $\mathrm{H_2O}$].}
 \label{single_step_c3h8}
 \begin{tabular}{|l|l|l|l|l|l|l|l|l|}
-\hline Reaction & $\nu_{\alpha}$ & E (kJ/kmol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
+\hline Reaction & $\nu_{\alpha}$ & E (J/mol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
 \ref{eq:1step_propane} & [-1 -5 3 4] & 0 & 4e5 & [1 1 0 0] & [0 0 0 0] \\ \hline
 \end{tabular}
 \end{center}
@@ -2889,7 +2905,7 @@ with the following reaction input parameters:
 \caption[Arrhenius values for a two-step C$_3$H$_8$ reaction]{Arrhenius values for a two-step C$_3$H$_8$ reaction; $\alpha$ = [$\mathrm{C_3H_8}$ $\mathrm{O_2}$ $\mathrm{CO}$ $\mathrm{H_2O}$ $\mathrm{CO_2}$].}
 \label{two_step_c3h8}
 \begin{tabular}{|l|l|l|l|l|l|l|l|l|}
-\hline Reaction & $\nu_{\alpha}$ & E (kJ/kmol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
+\hline Reaction & $\nu_{\alpha}$ & E (J/mol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
 \ref{eq:2step_propane_a} & [-1 -3.5 3 4 0] & 0 & 5e2 & [0.1 1.65 0 0 0] & [0 0 0 0 0] \\ \hline
 \ref{eq:2step_propane_b} & [0 -0.5 -1 0 1] & 0 & 8e3 & [0 0.25 1 0.5 0] & [0 0 0 0 0] \\ \hline
 \end{tabular}
@@ -2913,7 +2929,7 @@ with the following reaction input parameters:
 \caption[Arrhenius values for a two-step reversible C$_3$H$_8$ reaction]{Arrhenius values for a two-step reversible C$_3$H$_8$ reaction; $\alpha$ = [$\mathrm{C_3H_8}$ $\mathrm{O_2}$ $\mathrm{CO}$ $\mathrm{H_2O}$ $\mathrm{CO_2}$].}
 \label{two_step_rev_c3h8}
 \begin{tabular}{|l|l|l|l|l|l|l|l|l|}
-\hline Reaction & $\nu_{\alpha}$ & E (kJ/kmol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
+\hline Reaction & $\nu_{\alpha}$ & E (J/mol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
 \ref{eq:2step_propane_rev_a} & [-1 -3.5 3 4 0] & 0 & 5e2  & [0.1 1.65 0 0 0] & [0 0 0 0 0] \\ \hline
 \ref{eq:2step_propane_rev_b} & [0 -0.5 -1 0 1] & 0 & 8e3  & [0 0.25 1 0.5 0] & [0 0 0 0 0] \\ \hline
 \ref{eq:2step_propane_rev_c} & [0 0.5 1 0 -1]  & 0 & 4e-4 & [0 0 0 0 0 1]    & [0 0 0 0 0] \\ \hline
@@ -2944,7 +2960,7 @@ To couple verification of species mass fraction, compartment temperature, and co
 \caption[Arrhenius values for a two-step reversible C$_3$H$_8$ reaction]{Arrhenius values for a two-step reversible C$_3$H$_8$ reaction for equilibrium; $\alpha$ = [$\mathrm{C_3H_8}$ $\mathrm{O_2}$ $\mathrm{CO}$ $\mathrm{H_2O}$ $\mathrm{CO_2}$].}
 \label{two_step_eq_rev_c3h8}
 \begin{tabular}{|l|l|l|l|l|l|l|l|l|}
-\hline Reaction & $\nu_{\alpha}$ & E (kJ/kmol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
+\hline Reaction & $\nu_{\alpha}$ & E (J/mol) & A (cm$^3$/mole/s) & $a_{\alpha}$ & $n_{\alpha}$  \\ \hline \hline
 \ref{eq:2step_propane_rev_a} & [-1 -3.5 3 4 0] & 125520 & 1.5e12 & [0.1 1.65 0 0 0] & [0 0 0 0 0] \\ \hline
 \ref{eq:2step_propane_rev_b} & [0 -0.5 -1 0 1] & 167360 & 3.4e13 & [0 0.25 1 0.5 0] & [0 0 0 0 0] \\ \hline
 \ref{eq:2step_propane_rev_c} & [0 0.5 1 0 -1]  & 167360 & 8e8    & [0 0 0 0 0 1]    & [0 0 0 0 0] \\ \hline
@@ -3228,15 +3244,16 @@ Figs.~\ref{FED_FIC_plot} and \ref{FED_FIC_SMIX_plot}.
 \begin{figure}[ht]
 \noindent
 \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_O2_CO2_CO} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_Asphyxiants} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_Irritants} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_All_Gases} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_O2_CO2_CO} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_Asphyxiants} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_Irritants} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_All_Gases}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_O2_CO2_CO} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_Asphyxiants} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_Irritants} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_All_Gases} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_O2_CO2_CO} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_Asphyxiants} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_Irritants} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_All_Gases}
 \end{tabular*}
+\vskip-\baselineskip
 \caption[The FED and FIC values in \textct{FED\_FIC} test cases]{Comparison of FED and FIC predictions with expected values.}
 \label{FED_FIC_plot}
 \end{figure}
@@ -3244,15 +3261,16 @@ Figs.~\ref{FED_FIC_plot} and \ref{FED_FIC_SMIX_plot}.
 \begin{figure}[ht]
 \noindent
 \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_SMIX_O2_CO2_CO} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_SMIX_Asphyxiants} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_SMIX_Irritants} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FED_SMIX_All_Gases} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_SMIX_O2_CO2_CO} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_SMIX_Asphyxiants} \\
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_SMIX_Irritants} &
-\includegraphics[width=3.in]{SCRIPT_FIGURES/FIC_SMIX_All_Gases}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_SMIX_O2_CO2_CO} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_SMIX_Asphyxiants} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_SMIX_Irritants} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FED_SMIX_All_Gases} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_SMIX_O2_CO2_CO} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_SMIX_Asphyxiants} \\
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_SMIX_Irritants} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/FIC_SMIX_All_Gases}
 \end{tabular*}
+\vskip-\baselineskip
 \caption[The FED and FIC values in \textct{FED\_FIC\_SMIX} test cases]{Comparison of FED and FIC predictions with expected values using \textct{SMIX}.}
 \label{FED_FIC_SMIX_plot}
 \end{figure}
@@ -3295,9 +3313,58 @@ Fig.~\ref{fig:smoke_detector} shows a comparison of the analytical and simulated
 \end{figure}
 
 
-\section{Aerosol Deposition}
+\section{Aerosol Behavior}
+\subsection{Gravitational Settling and Deposition of Aerosols (\texorpdfstring{\textct{aerosol\_gravitational\_deposition}}{aerosol\_gravitational\_deposition})}
+	\label{aerosol_gravitational_deposition}
 
-\subsection{Surface Deposition of Aerosols (\texorpdfstring{\textct{propane\_flame\_deposition}}{propane\_flame\_deposition})}
+This verification test consists of two test cases. The second case, {\ct aerosol\_gravitational\_deposition\_2}, reverses the z-component of gravity. The case consists of a box 10~cm on side with adiabatic, free-slip side walls. The box is filled with two gas species each having a molecular weight of 28.8~g/mol, a viscosity of 0.00002~\si{kg/(m.s}, a thermal conductivity of 0.025~\si{W/(m.K}, and specific heat of 1~\si{kJ/(kg.K}, and zero diffusivity. One of the gas species is defined as an aerosol with a diameter of 100~$\mu$m, a solid phase density of 2000~kg/m$^3$, and a solid phase conductivity of 1~\si{W/(m.K}. The initial mass fraction of the aerosol is 0.00001. {\ct STRATIFICATION}, {\ct NOISE}, and all aerosol behaviors except for {\ct GRAVITATIONAL\_SETTLING} and {\ct GRAVITATIONAL\_DEPOSITION} are turned off. Since the box has a constant density over its height, a uniform settling rate over time is expected.
+
+\begin{figure}[ht]
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_gravitational_deposition_gas}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_gravitational_deposition_wall} \\
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_gravitational_deposition_2_gas}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_gravitational_deposition_2_wall}
+	\end{tabular}
+	\caption[Gas phase soot mass fractions and wall surface densities for the \textct{aerosol\_gravitational\_deposition} (Top) and \textct{aerosol\_gravitational\_deposition\_2} (Bottom) cases]{Time evolution of soot mass fraction in the gas (left) and soot surface density on the wall (right) for the \textct{aerosol\_gravitational\_deposition} (Top) and \textct{aerosol\_gravitational\_deposition\_2} (Bottom) cases.}
+	\label{fig:gravitational_deposition}
+\end{figure}
+
+\subsection{Thermophoretic Settling and Deposition of Aerosols (\texorpdfstring{\textct{aerosol\_thermophoretic\_deposition}}{aerosol\_thermophoretic\_deposition})}
+	\label{aerosol_thermophoretic_deposition}
+
+This verification test consists of two test cases. The second case, {\ct aerosol\_thermophoretic\_deposition\_2}, reverses the temperature gradient. The case consists of a box 10~cm on side with adiabatic, free-slip side walls and a 100 K temperature gradient over the height of the box. The box is filled with two gas species each having a molecular weight of 28.8~g/mol, a viscosity of 0.00002~\si{kg/(m.s}, a thermal conductivity of 0.025~\si{W/(m.K}, and specific heat of 1~\si{kJ/(kg.K}, and zero diffusivity. One of the gas species is defined as an aerosol with a diameter of 1~$\mu$m, a solid phase density of 2000~kg/m$^3$, and a solid phase conductivity of 1~\si{W/(m.K}. The initial mass fraction of the aerosol is 0.00001. The gas temperature is initialized to its steady-state temperature gradient. {\ct STRATIFICATION}, {\ct NOISE}, and all aerosol behaviors except for {\ct THERMOPHORETIC\_SETTLING} and {\ct THERMOPHORETIC\_DEPOSITION} are turned off. Thermophoretic settling rates are weakly dependent on the gas density. Since there is a temperature gradient, the settlings rates are not uniform over the height of the box. Unlike the gravitational settling case, this means over long enough time periods the overall settling rate is not linear in time; however, for a short time period a near linear settling rate is expected and can be determined analytically
+
+\begin{figure}[ht]
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_thermophoretic_deposition_gas}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_thermophoretic_deposition_wall} \\
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_thermophoretic_deposition_2_gas}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_thermophoretic_deposition_2_wall}
+	\end{tabular}
+	\caption[Gas phase soot densities and wall surface densities for the \textct{aerosol\_thermophoretic\_deposition} (Top) and \textct{aerosol\_thermophoretic\_deposition\_2} (Bottom) cases]{Time evolution of soot density in the gas (left) and soot surface density on the wall (right) for the \textct{aerosol\_thermophoretic\_deposition} (Top) and \textct{aerosol\_thermophoretic\_deposition\_2} (Bottom) cases.}
+	\label{fig:thermophoretic_deposition}
+\end{figure}
+
+\subsection{Turbulent Deposition of Aerosols (\texorpdfstring{\textct{aerosol\_turbulent\_deposition}}{aerosol\_turbulent\_deposition})}
+	\label{aerosol_turbulent_deposition}
+
+This verification test consists of three tunnel like geometries 10~cm on side with adiabatic, free-slip walls. One end of the tunnel is {\ct OPEN} and the other end has a constant inlet velocity of 0.001 m/s, 0.1 m/s, or 1 m/s. The tunnels are filled with two gas species each having a molecular weight of 28.8~g/mol, a viscosity of 0.00002~\si{kg/(m.s}, a thermal conductivity of 0.025~\si{W/(m.K}, and specific heat of 1~\si{kJ/(kg.K}, and zero diffusivity. One of the gas species is defined as an aerosol with a diameter of 100~$\mu$m, a solid phase density of 2000~kg/m$^3$, and a solid phase conductivity of 1~\si{W/(m.K}. The initial mass fraction of the aerosol is 0.00001. {\ct STRATIFICATION}, {\ct NOISE}, and all aerosol behaviors except for {\ct TURBULENT\_DEPOSITION} are turned off. Turbulent deposition is computed using a correlation based open the wall friction velocity and the wall dimensionless stopping distance. The correlation has three parts, and the selected velocities test each part. Since the inlet condition is a constant velocity with a constant aerosol mass fraction, the first wall cell after the inlet will see a uniform settling rate over time.
+
+\begin{figure}[ht]
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_turbulent_deposition_1_wall}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_turbulent_deposition_2_wall} \\
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_turbulent_deposition_3_wall}
+	\end{tabular}
+	\caption[Wall surface densities for the \textct{aerosol\_turbulent\_deposition} case]{Time evolution of soot surface density on the wall for the \textct{aerosol\_turbulent\_deposition}. Top left is the diffusion regime, top right is the diffusion-impaction regime, and bottom is the inertial regime.}
+	\label{fig:turbulent_deposition}
+\end{figure}
+
+\subsection{Mass Conservation of Depositing Aerosols (\texorpdfstring{\textct{propane\_flame\_deposition}}{propane\_flame\_deposition})}
 \label{propane_flame_deposition}
 
 The calculations described in this section check the conservation of mass for the aerosol deposition algorithms. The example involves a reaction that invokes the aerosol deposition model in FDS (i.e., soot deposition). For this example, the fuel will be propane with a peak heat release rate of 100~kW and a 5~\% soot yield. For a 100~kW propane fire (\textct{HEAT\_OF\_COMBUSTION} of 44,715~kJ/kg), the associated burning rate is 2.236~g/s. A \textct{RAMP} is used to specify a burning rate from a propane burner that ramps up linearly to 2.236~g/s from 0~s to 1~s, remains steady at 2.236~g/s from 1~s to 4~s, then linearly decreases to 0~g/s from 4~s to 5~s. The total fuel mass released is 8.944~g of propane. Therefore, the resulting mass of soot should be equal to 0.447~g, or 5~\% of the total amount of fuel. For a case with no aerosol deposition, we would expect the mass of soot in the gas phase to be equal to 0.447~g. For a case with aerosol deposition, we would expect some fraction of soot to exist in the gas phase and the remainder of soot to be deposited on the wall. The sum of soot in the gas phase and deposited soot should be 0.447~g.
@@ -3305,58 +3372,43 @@ The calculations described in this section check the conservation of mass for th
 Figure~\ref{fig:deposition_mass} shows the time evolution of soot in the gas phase, deposited soot, and total soot (sum of soot in the gas phase and deposited soot) for five cases. The five cases are (1) all aerosol deposition mechanisms active, (2) no aerosol deposition mechanisms active, (3) gravitational deposition only, (4) thermophoretic deposition only, and (5) turbulent deposition only.
 
 \begin{figure}[ht]
-\centering
-\begin{tabular}{c}
-\includegraphics[width=3.0in]{SCRIPT_FIGURES/propane_flame_deposition_gas}
-\includegraphics[width=3.0in]{SCRIPT_FIGURES/propane_flame_deposition_wall} \\
-\includegraphics[width=3.0in]{SCRIPT_FIGURES/propane_flame_deposition_total}
-\end{tabular}
-\caption[Soot mass conservation for \textct{propane\_flame\_deposition} case]{Time evolution of soot mass components for \textct{propane\_flame\_deposition} cases. (Top left) Mass of soot in gas phase. (Top right) Mass of soot deposited on walls. (Bottom) Total mass of soot in gas phase and deposited on walls.}
-\label{fig:deposition_mass}
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/propane_flame_deposition_gas}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/propane_flame_deposition_wall} \\
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/propane_flame_deposition_total}
+	\end{tabular}
+	\caption[Soot mass conservation for \textct{propane\_flame\_deposition} case]{Time evolution of soot mass components for \textct{propane\_flame\_deposition} cases. (Top left) Mass of soot in gas phase. (Top right) Mass of soot deposited on walls. (Bottom) Total mass of soot in gas phase and deposited on walls.}
+	\label{fig:deposition_mass}
 \end{figure}
 
+\subsection{Agglomeration of Aerosols (\texorpdfstring{\textct{aerosol\_agglomeration}}{aerosol\_agglomeration})}
+	\label{aerosol_agglomeration}
 
-\subsection{Gravitational Settling of Aerosols (\texorpdfstring{\textct{soot\_gravitational\_settling}}{soot\_gravitational\_settling})}
-\label{soot_gravitational_settling}
-\label{soot_gravitational_settling_2}
+This verification case consists of two test cases.
 
-The calculations described in this section check the conservation of mass for the gravitational settling algorithm. The gravitational settling algorithm involves both the settling of soot particles in the gas phase and the accumulation of soot on the condensed phase. In both examples the initial soot concentration in a 1~m$^3$ box is set as 100~mg/m$^3$. The soot deposits to the bottom of the box via gravitational settling only. By default, if a species is defined as an aerosol by setting \textct{AEROSOL=.TRUE.} on the \textct{SPEC} line, then all of the aerosol deposition mechanisms (gravitational, thermophoretic, and turbulent) will act upon that species. For these two examples, gravitational deposition is enabled and the other deposition mechanisms are disabled by using the following inputs on the \textct{MISC} line:
-
-\begin{lstlisting}
-&MISC GRAVITATIONAL_DEPOSITION  = .TRUE.
-      THERMOPHORETIC_DEPOSITION = .FALSE.
-      TURBULENT_DEPOSITION      = .FALSE. /
-\end{lstlisting}
-
-\noindent In the first test case, a simple HVAC setup (one supply vent and one exhaust vent) is used to stir the air and create well-mixed conditions (i.e. this case does not test the gravitational settling in the gas but only the conservation of mass). The transient gas-phase soot concentration for a well-mixed compartment can then be represented as
-\be
-\frac{\d C}{\d t} = -\frac{A}{V} (u_{\rm g} C)
-\label{eq:gravitational_settling}
-\ee
-where $C$ is the soot concentration (mg/m$^3$), $A/V$ is the floor surface area to volume ratio (\si{1/m}), and $u_{\rm g}$ is the gravitational settling velocity (m/s). Equation~\ref{eq:gravitational_settling} has an analytic solution for the dynamic gas-phase soot concentration of the form
-\be
-C(t) = C_0 \exp \left[-\frac{A}{V}(u_{\rm g} t)\right]
-\ee
-where $C_0$ is the initial gas-phase soot concentration (100~mg/m$^3$). In this example, the relevant surface area is the area of the lower surface where the soot deposits, and thus the surface area to volume ratio ($A/V$) is equal to \SI{1}{1/m}. For a soot particle with a diameter of 5~$\mu$m, the gravitational settling velocity is equal to 1.41~mm/s. The governing equations for the gravitational settling velocity are discussed in more detail in the FDS Technical Reference Guide~\cite{FDS_Math_Guide}. Figure~\ref{fig:soot_gravitational_settling} shows a comparison of the analytic and simulated results for the time evolution of the gas-phase soot concentration for the first test case.
+The first case to be discussed consists of a box 10~cm on side with adiabatic, free-slip side walls. The box is filled with two gas species each having a molecular weight of 28.8~g/mol, a viscosity of 0.00002~\si{kg/(m.s}, a thermal conductivity of 0.025~\si{W/(m.K}, and specific heat of 1~\si{kJ/(kg.K}, and zero diffusivity. One of the gas species is defined as an aerosol with two particle size bins with a minimum diameter of 1~$\mu$m and a maximum diameter of 10~$\mu$m, a solid phase density of 2000~kg/m$^3$, and a solid phase conductivity of 1~\si{W/(m.K}. The initial mass fraction of the first size bin of the aerosol is 0.00001. {\ct STRATIFICATION}, {\ct NOISE}, and all aerosol behaviors except for {\ct AGGLOMERATION} are turned off. In this case the only mechanisms operating are Brownian and gravitational agglomeration. The case is run for 60 s.
 
 \begin{figure}[ht]
-\centering
-\begin{tabular}{c}
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/soot_gravitational_settling}
-\end{tabular}
-\caption[Soot mass concentration for \textct{soot\_gravitational\_settling} case]{Time evolution of soot mass concentration for the \textct{soot\_gravitational\_settling} case.}
-\label{fig:soot_gravitational_settling}
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_agglomeration_bin1}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_agglomeration_bin2}
+	\end{tabular}
+	\caption[Gas phase soot mass fractions the \textct{aerosol\_agglomeration} cases]{Time evolution of soot mass fraction in the gas for size bin 1 and both bins (left) and size bin 2 (right) for the \textct{aerosol\_agglomeration} case.}
+	\label{fig:agglomeration}
 \end{figure}
 
-The second test case removes the HVAC system. This case tests the gravitational settling in the gas phase. Over a period of 100 s, the soot in the compartment will fall 14.1 cm. Soot within 14.1 cm of the bottom will deposit on the floor. Therefore, the expected results are a linear decrease in soot mass such that after 100~s, 14.1~\% of the soot mass has been removed. Figure~\ref{fig:soot_gravitational_settling_2} shows a comparison of the analytic and simulated results for the time evolution of the gas-phase soot concentration for the second test case.
+In the second case three pairs of small (3~mm by 3~mm) vents are placed on opposite corners of the the walls, floor, and ceiling of the box. Each pair is connected by an HVAC duct that blows air at 1~m/s at the face of the vents. The average dissipation rate in the box is 0.0204~m$^2$/s$^3$. Using the average dissipation rate, the agglomeration rate is computed and the resulting mass fractions are compared against the volume averaged mass fractions computed by FDS.
 
 \begin{figure}[ht]
-\centering
-\begin{tabular}{c}
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/soot_gravitational_settling_2}
-\end{tabular}
-\caption[Soot concentration for \textct{soot\_gravitational\_settling\_2} case]{Time evolution of soot concentration for the \textct{soot\_gravitational\_settling\_2} case.}
-\label{fig:soot_gravitational_settling_2}
+	\centering
+	\begin{tabular}{c}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_agglomeration_2_bin1}
+		\includegraphics[height=2.2in]{SCRIPT_FIGURES/aerosol_agglomeration_2_bin2}
+	\end{tabular}
+	\caption[Gas phase soot mass fractions the \textct{aerosol\_agglomeration\_2} cases]{Time evolution of soot mass fraction in the gas for size bin 1 and both bins (left) and size bin 2 (right) for the \textct{aerosol\_agglomeration\_2} case.}
+	\label{fig:agglomeration_2}
 \end{figure}
 
 \chapter{Heat Conduction}
@@ -3723,7 +3775,7 @@ This set of cases tests the ability of the 3D heat conduction solver to transfer
 \label{ht3d_sphere_51}
 \label{ht3d_sphere_25}
 
-\textbf{Salah Benkorichi, Ulster University}\\
+\textbf{Salah Benkorichi, Omega Fire Engineering Ltd.}\\
 
 In this example, a solid sphere of radius 0.1 m with internal heat generated at $\dot{q}^{\prime\prime\prime}$ = 200 \si{kW/m^3} is studied. The initial temperature at the boundary is set to \SI{20}{\degreeCelsius}. The objective of the test is to ensure that the heat conduction through the sphere and across the radius is computed properly. The heat conduction can be written as
 \begin{equation}
@@ -3756,6 +3808,20 @@ The solution is run for 180 s. In Fig.~\ref{fig:ht3d_sphere_time} we show the te
 \includegraphics[height=2.2in]{../FDS_Verification_Guide/SCRIPT_FIGURES/ht3d_sphere_convergence1}
 \caption[The \textct{ht3d\_sphere} convergence]{$L_{\infty}$ error in sphere temperature at $t=180$ s with different cell numbers [102, 51, 25] from left to right.}
 \label{fig:ht3d_sphere_conv}
+\end{figure}
+
+\subsection{3D Internal Radiation (\texorpdfstring{\textct{ht3d\_radiation}}{ht3d\_radiation})}
+\label{ht3d_radiation}
+
+\textbf{Morgan Bruns, Virginia Military Institute}\\
+
+This is a 1D problem set up in the 3D heat transfer solver.  The hot surface of a block of material is held at 700 \si{\degreeCelsius}.  The cold side is held at 20 \si{\degreeCelsius}.  The thermal conductivity is set to 0.1 \si{W/(m.K)}.  The refractive index $n$ is set to 1.5 and two values of absorption coefficient $\kappa = [100, 2000]$ 1/m are used.  If there where no internal radiation, the temperature solution would, of course, just be linear.  For a thermally thick material, the radiative conductivity $k_{\mathrm{r}} = 16 n^2 \sigma T^3 / 3 \kappa$ is added to the thermal conductivity.  Figure \ref{fig:ht3d_radiation} shows FDS results compared to the analytical solution from \cite{Modest:2003}.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[height=2.2in]{../FDS_Verification_Guide/SCRIPT_FIGURES/ht3d_radiation}
+\caption[The \textct{ht3d\_radiation} solution]{Steady-state temperature profiles inside a solid.  We consider two values of absorption coefficient, $\kappa = [100, 2000]$ 1/m and look at FDS solutions at three grid resolutions.}
+\label{fig:ht3d_radiation}
 \end{figure}
 
 
@@ -3966,7 +4032,7 @@ where $\delta$ is the thickness of the surface layer and $A$ is the area of the 
 Figure~\ref{cell_burn_away_fig} displays the computed and analytical burning rate. Note that the burning rate is proportional to the mass and the mass decays exponentially to zero in this case because we have specified the {\ct THICKNESS} to be $V/A$ and set the {\ct BULK\_DENSITY} to be 50~\si{kg/m^3} on the {\ct OBST} line defining the single solid grid cell.
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=3.5in]{SCRIPT_FIGURES/cell_burn_away}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/cell_burn_away}
 \caption[The {\ct cell\_burn\_away} test case.]{Burning rate of a single grid cell with fixed reaction rate.}
 \label{cell_burn_away_fig}
 \end{figure}
@@ -4256,13 +4322,13 @@ In the FDS input file, {\ct tga\_sample.fds}, this information is conveyed via t
 Note that {\ct REFERENCE\_RATE}, the FDS input parameter, represents the quantity, $r_{\alpha,{\rm p}}/Y_{\alpha,0}$. Note also that both material components have the same residue yield, {\ct NU\_MATL}. Solely from TGA data, it is not possible to determine how many unique material components there are, or what the reaction sequence is. The point of this exercise is simply to get FDS to mimic the total mass loss rate curve.
 
 
-\subsection{Effect of the TGA Heating Rata (\texorpdfstring{\textct{birch\_tga}}{birch\_tga})}
+\subsection{Effect of the TGA Heating Rate (\texorpdfstring{\textct{birch\_tga}}{birch\_tga})}
 \label{birch_tga}
 
 This is an example of a comparison of a candidate solid phase model with TGA data that shows the effect of the sample heating rate. The sample cases called \textct{birch\_tga\_1step\_2} and \textct{birch\_tga\_1step\_20} simulate two standard TGA experiments in which small samples of birch wood are heated up slowly at constant rates of 2~\si{\degree C}/min and 20~\si{\degree C}/min, respectively. The model of the wood consists of only one reaction that converts virgin wood to char and fuel gases. There is also a reaction in the simulation that does nothing more than evaporate the small amount of moisture in the wood. This evaporation is evident in Fig.~\ref{fig_birch_tga} near the temperature of 100~\si{\degree C}.
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=3.5in]{SCRIPT_FIGURES/birch_tga}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/birch_tga}
 \caption[An example of TGA data]{\label{fig_birch_tga} Comparison of a solid phase model of birch wood with TGA data.}
 \end{figure}
 
@@ -4386,7 +4452,7 @@ This case compares mass loss rates and material thickness for pyrolysis of black
 \subsection{Mass Transport (\texorpdfstring{\textct{pyro3d\_transport}}{pyro3d\_transport})}
 \label{pyro3d_transport}
 
-This case is a 3D version of the {\ct FAA\_Polymers\_PMMA} validation case.  A block of ``black'' PMMA 0.1 m $\times$ 0.1 m $\times$ 0.009 m, giving $9 \times 10^{-5} \;\si{m^3}$, with a bulk density of 1100 \si{kg/m^3}, giving 0.099 kg of total mass, is heated from above with 52 \si{kW/m^2}, generating methane as a pyrolysis gas.  The verification target to confirm that as the PMMA is consumed the correct amount of methane gets produced.  The results are shown below in Fig.~\ref{fig:pyro3d_transport}.
+This case is a 3D version of the {\ct FAA\_Polymers\_PMMA} validation case.  A block of ``black'' PMMA 0.096 m $\times$ 0.096 m $\times$ 0.009 m, giving $8.294 \times 10^{-5} \;\si{m^3}$, with a bulk density of 1100 \si{kg/m^3}, giving 0.0912 kg of total mass, is heated from above with 52 \si{kW/m^2}, generating methane as a pyrolysis gas.  The verification target to confirm that as the PMMA is consumed the correct amount of methane gets produced.  The results are shown below in Fig.~\ref{fig:pyro3d_transport}.
 
 \begin{figure}[!ht]
     \centering
@@ -4818,7 +4884,7 @@ This case tests the conservation of energy between droplets, surfaces, and the g
 \begin{eqnarray*}
 \Delta E &=& m_{\rm w} \, c_{\rm w} \, (T_{{\rm w},0}-T_{\rm g,f}) \\[.1in]
 \Delta H &=& m_{\rm g,0} \, c_{p,{\rm g}} \, (T_{\rm g,f}-T_{\rm g,0} ) + m_{\rm d} \Big( c_{\rm l} \, (T_{\rm b}-T_{\rm d,0}) + c_{p,{\rm g}} \, (T_{\rm g,f}-T_{\rm b}) + h_v  \Big) \\[.1in]
-\Delta p &=& \frac{R}{W \, V} \left( m_{\rm g,f} \, T_{\rm g,f} - m_{\rm g,0} \, T_{\rm g,0} \right) \quad ; \quad R = 8.314 \; \hbox{kJ/kmol/K}
+\Delta p &=& \frac{R}{W \, V} \left( m_{\rm g,f} \, T_{\rm g,f} - m_{\rm g,0} \, T_{\rm g,0} \right) \quad ; \quad R = 8.314 \; \hbox{J/mol/K}
 \end{eqnarray*}
 The final temperature is calculated to be 445.2~K (172.0~$^\circ$C) and the pressure increase is 34.6~kPa.
 
@@ -4987,7 +5053,7 @@ The \textct{HVAC\_damper} example case is a simple duct network of three ducts c
 
 \begin{figure}[h!]
 \centering
-\includegraphics[width=3.5in]{SCRIPT_FIGURES/HVAC_damper}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_damper}
 \caption[Example case \textct{HVAC\_damper}]{Simple duct network with a damper, case \textct{HVAC\_damper}.}
 \label{fig:HVAC_damper}
 \end{figure}
@@ -5030,8 +5096,8 @@ The solution is $p_2=4.5$~Pa and $p_1=-4.5$~Pa (see Fig.~\ref{fan_test_fig}). No
 
 \begin{figure}[ht]
 \begin{tabular*}{\textwidth}{lr}
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/fan_test_Pressure} &
-\includegraphics[width=3.1in]{SCRIPT_FIGURES/fan_test_Volume_Flow}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/fan_test_Pressure} &
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/fan_test_Volume_Flow}
 \end{tabular*}
 \caption[Results of the \textct{fan\_test} case]{Pressure and volume flow for the \textct{fan\_test}.}
 \label{fan_test_fig}
@@ -5061,12 +5127,12 @@ where $A_{\hbox{\scriptsize leak}}=0.002$~m$^2$ and $\rho$ is the density at the
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=3.5in]{SCRIPT_FIGURES/leak_test}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/leak_test}
 \caption[The \textct{leak\_test} case]{Pressure difference between two compartments with leakage connected by a fan.}
 \label{leak_test_fig}
 \end{figure}
 
-\subsection{Multiple zone leakage (\texorpdfstring{\textct{leak\_test\_2}}{leak\_test\_2})}
+\subsection{Multiple Zone Leakage (\texorpdfstring{\textct{leak\_test\_2}}{leak\_test\_2})}
 \label{leak_test_2}
 
 This case starts with the same input as \textct{leak\_test}.  A second leakage vent is added to the floor of the discharge side of the fan.  This vent leaks to the ambient.  When the simulation starts the fan pushes air from one compartment to the other. As the pressure rises, the leakage increases until the leakage flow rate is equal to the fan flow rate. Since some air from the interior compartment is being discharged to the ambient, the average pressure of the two compartments decreases until the pressure of the interior compartment is equal to that of the ambient. At this point in time, there is no more leakage to the outside and the fan flow rate equals the leakage flow rate between the two compartments.  Given the leakage area and the fan curve, this occurs when the pressure difference between the two compartments is the same as the pressure difference from \textct{leak\_test}, only now the discharge side should be at 0~Pa.
@@ -5080,6 +5146,24 @@ This case starts with the same input as \textct{leak\_test}.  A second leakage v
    \label{fig_HVAC_leak_fan}
 \end{figure}
 
+\subsection{Multiple Zone, Multiple Mesh Leakage (\texorpdfstring{\textct{zone\_shape\_2}}{zone\_shape\_2})}
+\label{zone_shape_2}
+
+A duct with a square 1~m cross section winds its way through a 2 by 2 by 2 array of meshes that span a sealed 6.2~m cubic domain. A fan forces air into one end of the duct at a rate of $\dot{V}=0.1$~m$^3$/s. The other end of the duct has a leak with effective area $A_\mathrm{L}=0.007746$~m$^2$. The expected pressure difference between the interior and exterior of the duct is
+\be
+   \Delta p = \frac{\rho}{2} \left( \frac{\dot{V}}{A_\mathrm{L}} \right)^2 \approx 100 \; \mathrm{Pa}
+\ee
+The overall mass in the domain should not change. Figure~\ref{fig_zone_shape_2} displays the pressure difference and overall mass.
+\begin{figure}[ht]
+   \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+      \scalebox{1.0}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/zone_shape_2_pres} } &
+      \scalebox{1.0}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/zone_shape_2_mass} }
+   \end{tabular*}
+   \caption[The \textct{zone\_shape\_2} test case]{(Left) Pressure difference between interior and exterior of the duct. (Right) Overall mass.}
+   \label{fig_zone_shape_2}
+\end{figure}
+
+
 \subsection{Leak Pressure Exponent (\texorpdfstring{\textct{HVAC\_leak\_exponent}}{HVAC\_leak\_exponent})}
 \label{HVAC_leak_exponent}
 
@@ -5091,7 +5175,7 @@ This verification case has three 1000~m$^3$ compartments have 0.01~m$^2$ of leak
 
 \begin{figure}[ht]
 	\centering
-	\includegraphics[width=3.5in]{SCRIPT_FIGURES/HVAC_leak_exponent}
+	\includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_leak_exponent}
 	\caption[The \textct{HVAC\_leak\_exponent} case]{Velocities through leakage with varying \textct{LEAK\_PRESSURE\_EXPONENT} and \textct{LEAK\_REFERENCE\_PRESSURE}}
 	\label{leak_exponent_fig}
 \end{figure}
@@ -5135,8 +5219,8 @@ We undertake a convergence study to demonstrate that the adopted numerical metho
 
 \begin{figure}[ht]
 \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-      \scalebox{1}{ \includegraphics[width=3in]{SCRIPT_FIGURES/HVAC_mass_transport_convergence_2} } &
-      \scalebox{1}{ \includegraphics[width=3in]{SCRIPT_FIGURES/HVAC_mass_transport_convergence_3} }
+      \scalebox{1}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_mass_transport_convergence_2} } &
+      \scalebox{1}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_mass_transport_convergence_3} }
    \end{tabular*}
 \caption[\textct{HVAC\_mass\_transport\_conv\_x} L1 and L2 error results.]{L1 (left) and L2 (right) norm errors in mass fraction for the convergence study using various cell numbers (320, 160, 80, 40, 20 from left to right). The plot demonstrates errors decreasing for increasing cell numbers (i.e. decreasing cell size). L1 and L2 norm errors decay at \(O(\Delta x)\).}
 \label{fig_HVAC_mass_transport_conv_2}
@@ -5180,7 +5264,7 @@ The two compartments are connected by two ducts, A and B, each being \SI{10}{\me
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=4.48in]{SCRIPT_FIGURES/HVAC_mass_transport_conservation_1b}
+\includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_mass_transport_conservation_1b}
 \caption[\textct{HVAC\_mass\_transport\_conservation\_1} test case.]{Species~1 and 2 masses in the left and right compartments.}
 \label{fig_HVAC_mass_transport_conservation_1b}
 \end{figure}
@@ -5231,17 +5315,17 @@ The left compartment is separated into two sub-compartments, A and B. These sub-
 
 \subsection{Energy conservation and pressure (\texorpdfstring{\textct{HVAC\_mass\_transport\_energy}}{HVAC\_mass\_transport\_energy})}
 \label{HVAC_mass_transport_energy}
-The left compartment is initialized with a temperature of \SI{100}{\degreeCelsius}, the right compartment remains at ambient (\SI{20}{\degreeCelsius}). Both compartments and the duct network are initialized with a single species. The species has a specific heat of \SI[per-mode=symbol]{1}{\joule\per\kilogram\per\kelvin}. The compartments are connected by two separate ducts, duct~A and duct~B, both with a length of \SI{1}{\meter}. Duct~A has a specified flow from left the right with a velocity of \SI[per-mode=symbol]{1}{\meter\per\second}, duct~B has no defined flow and a minor losses coefficient of \num{2}. Duct~A and B are initialized using gas data from the left and right compartment duct nodes respectively. Based on Eq.~\ref{eq_HVAC_mass_transport_energy} enthalpy in the FDS domain should be \SI{293.15}{\kilo\joule} and should remain constant. Based upon Eq.~\ref{HVAC_steady_state} the pressure difference between the upstream and downstream duct node of duct~B should be \SI{0.8928}{\pascal}. Duct node pressure difference and total enthalpy are presented in Fig.~\ref{fig_HVAC_mass_transport_energy}.
+The left compartment is initialized with a temperature of \SI{100}{\degreeCelsius}, the right compartment remains at ambient (\SI{20}{\degreeCelsius}). Both compartments and the duct network are initialized with a single species. The species has a specific heat of \SI[per-mode=symbol]{1}{\kilo\joule\per\kilogram\per\kelvin}. The compartments are connected by two separate ducts, duct~A and duct~B, both with a length of \SI{1}{\meter}. Duct~A has a specified flow from left to right with a velocity of \SI[per-mode=symbol]{1}{\meter\per\second}, duct~B has no defined flow and a minor losses coefficient of \num{2}. Duct~A and B are initialized using gas data from the left and right compartment duct nodes respectively. Based on Eq.~\ref{eq_HVAC_mass_transport_energy} enthalpy in the FDS domain should be \SI{293.15}{\kilo\joule} and should remain constant. Based upon Eq.~\ref{HVAC_steady_state} the pressure difference between the upstream and downstream duct node of duct~B should be \SI{0.8928}{\pascal}. Duct node pressure difference and total enthalpy are presented in Fig.~\ref{fig_HVAC_mass_transport_energy}.
 
 \begin{equation}
-h_{\mbox{\tiny CFD}} = c_p V(T_{\mbox{\tiny left}} \rho_{\mbox{\tiny left}}+T_{\mbox{\tiny right}} \rho_{\mbox{\tiny right}})
+h_{\mbox{\tiny CFD}} = c_p \frac{V(T_{\mbox{\tiny left}}}{2} \rho_{\mbox{\tiny left}}+T_{\mbox{\tiny right}} \rho_{\mbox{\tiny right}})
 \label{eq_HVAC_mass_transport_energy}
 \end{equation}
 
 \begin{figure}[ht]
 \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-      \scalebox{1}{ \includegraphics[width=3in]{SCRIPT_FIGURES/HVAC_mass_transport_energy_p} } &
-      \scalebox{1}{ \includegraphics[width=3in]{SCRIPT_FIGURES/HVAC_mass_transport_energy_e} }
+      \scalebox{1}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_mass_transport_energy_p} } &
+      \scalebox{1}{ \includegraphics[height=2.2in]{SCRIPT_FIGURES/HVAC_mass_transport_energy_e} }
    \end{tabular*}
 \caption[\textct{HVAC\_mass\_transport\_energy} $\Delta$ p and enthalpy results.]{Pressure difference between the inlet and outlet of duct~B (left). Total enthalpy in the CFD domain (right).}
 \label{fig_HVAC_mass_transport_energy}
