@@ -2693,6 +2693,7 @@ SELECT CASE(DRAG_LAW)
       ELSEIF (RE>=1000._EB) THEN
          DRAG = 1._EB
       ENDIF
+      DRAG = 0.57_EB*DRAG
 
    CASE(USER_DRAG)
       DRAG = 1._EB ! PC%DRAG_COEFFICIENT set elsewhere
