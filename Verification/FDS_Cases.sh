@@ -4,6 +4,19 @@
 
 $QFDS -p 4 -d Adaptive_Mesh_Refinement random_meshes.fds
 
+$QFDS -d Aerosols aerosol_agglomeration.fds
+$QFDS -d Aerosols aerosol_agglomeration_2.fds
+$QFDS -d Aerosols aerosol_gravitational_deposition.fds
+$QFDS -d Aerosols aerosol_gravitational_deposition_2.fds
+$QFDS -d Aerosols aerosol_thermophoretic_deposition.fds
+$QFDS -d Aerosols aerosol_thermophoretic_deposition_2.fds
+$QFDS -d Aerosols aerosol_turbulent_deposition.fds
+$QFDS -d Aerosols propane_flame_deposition.fds
+$QFDS -d Aerosols propane_flame_deposition_gravitational.fds
+$QFDS -d Aerosols propane_flame_deposition_none.fds
+$QFDS -d Aerosols propane_flame_deposition_thermophoretic.fds
+$QFDS -d Aerosols propane_flame_deposition_turbulent.fds
+
 $QFDS -d Atmospheric_Effects lee_waves.fds
 $QFDS -d Atmospheric_Effects stack_effect.fds
 $QFDS -d Atmospheric_Effects lapse_rate.fds
@@ -40,6 +53,7 @@ $QFDS -d Complex_Geometry geom_arch.fds
 $QFDS -d Complex_Geometry sphere_helium_1mesh.fds
 $QFDS -p 3 -d Complex_Geometry sphere_helium_3meshes.fds
 $QFDS -p 3 -d Complex_Geometry sphere_helium_conserve_3meshes.fds
+$QFDS -d Complex_Geometry sphere_radiate.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p25.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p125.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p0625.fds
@@ -67,6 +81,19 @@ $QFDS -d Complex_Geometry shunn3_128_cc_imp_gdv.fds
 $QFDS -d Complex_Geometry shunn3_256_cc_imp_gdv.fds
 $QFDS -d Complex_Geometry shunn3_384_cc_imp_gdv.fds
 
+$QFDS -d Complex_Geometry geom_poiseuille_N10a_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N20a_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N40a_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N80a_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N10na_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N20na_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N40na_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N80na_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N10nah_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N20nah_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N40nah_theta0.fds
+$QFDS -d Complex_Geometry geom_poiseuille_N80nah_theta0.fds
+
 $QFDS -d Complex_Geometry geom_bad_inconsistent_normals.fds
 $QFDS -d Complex_Geometry geom_bad_non_manifold_edge.fds
 $QFDS -d Complex_Geometry geom_bad_non_manifold_vert.fds
@@ -84,7 +111,7 @@ $QFDS -d Controls rms_cov_corr.fds
 $QFDS -d Controls rms_example.fds
 
 $QFDS -d Detectors aspiration_detector.fds
-$QFDS -d Detectors beam_detector.fds
+$QFDS -p 8 -d Detectors beam_detector.fds
 $QFDS -d Detectors objects_dynamic.fds
 $QFDS -d Detectors objects_static.fds
 $QFDS -d Detectors smoke_detector.fds
@@ -106,11 +133,14 @@ $QFDS -d Fires box_burn_away1.fds
 $QFDS -d Fires box_burn_away2.fds
 $QFDS -d Fires box_burn_away3.fds
 $QFDS -d Fires box_burn_away4.fds
+$QFDS -d Fires box_burn_away5.fds
+$QFDS -d Fires box_burn_away6.fds
 $QFDS -d Fires box_burn_away_2D.fds
 $QFDS -d Fires box_burn_away_2D_residue.fds
 $QFDS -d Fires box_burn_away1_pyro3d_vs_pyro1d.fds
 $QFDS -d Fires box_burn_away1_pyro3d_transport.fds
 $QFDS -d Fires couch.fds
+$QFDS -p 2 -d Fires couch2.fds
 $QFDS -d Fires fire_whirl_pool.fds
 $QFDS -d Fires spray_burner.fds
 $QFDS -d Fires HoC_Ideal.fds
@@ -207,6 +237,12 @@ $QFDS -d Heat_Transfer ht3d_sphere_51.fds
 $QFDS -p 8 -d Heat_Transfer ht3d_sphere_102.fds
 $QFDS -d Heat_Transfer ht3d_vs_ht1d.fds
 $QFDS -p 4 -d Heat_Transfer back_wall_test.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa100_n10.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa100_n20.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa100_n40.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa2000_n10.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa2000_n20.fds
+$QFDS -d Heat_Transfer ht3d_radiation_kappa2000_n40.fds
 
 $QFDS -d HVAC ashrae7_fixed_flow.fds
 $QFDS -d HVAC ashrae7_quadratic.fds
@@ -241,11 +277,18 @@ $QFDS -d HVAC leak_test_2.fds
 $QFDS -d HVAC leak_test.fds
 $QFDS -d HVAC HVAC_leak_exponent.fds
 
+$QFDS -d Miscellaneous layer_1mesh.fds
+$QFDS -p 3 -d Miscellaneous layer_4mesh.fds
 $QFDS -d Miscellaneous pyramid.fds
 $QFDS -d Miscellaneous mesh_transformation.fds
 $QFDS -d Miscellaneous obst_sphere.fds
 $QFDS -d Miscellaneous obst_cylinder.fds
 $QFDS -d Miscellaneous obst_cone.fds
+$QFDS -d Miscellaneous obst_rotbox.fds
+$QFDS -d Miscellaneous obst_sphere_mass_flux.fds
+$QFDS -d Miscellaneous obst_cylinder_mass_flux.fds
+$QFDS -d Miscellaneous obst_cone_mass_flux.fds
+$QFDS -d Miscellaneous obst_box_mass_flux.fds
 
 $QFDS -d NS_Analytical_Solution ns2d_16.fds
 $QFDS -d NS_Analytical_Solution ns2d_16_nupt1.fds
@@ -267,9 +310,10 @@ $QFDS -d Pressure_Effects pressure_rise.fds
 $QFDS -d Pressure_Effects zone_break_fast.fds
 $QFDS -d Pressure_Effects zone_break_slow.fds
 $QFDS -p 2 -d Pressure_Effects zone_shape.fds
+$QFDS -p 8 -d Pressure_Effects zone_shape_2.fds
 
 $QFDS -d Pressure_Solver dancing_eddies_1mesh.fds
-$QFDS -p 4 -d Pressure_Solver dancing_eddies_glmat.fds
+$QFDS -p 4 -d Pressure_Solver dancing_eddies_uglmat.fds
 $QFDS -p 4 -d Pressure_Solver dancing_eddies_tight.fds
 $QFDS -p 4 -d Pressure_Solver dancing_eddies_tight_overlap.fds
 $QFDS -p 4 -d Pressure_Solver dancing_eddies_default.fds
@@ -277,7 +321,7 @@ $QFDS -p 4 -d Pressure_Solver dancing_eddies_scarc.fds
 $QFDS -p 4 -d Pressure_Solver dancing_eddies_scarc_tight.fds
 $QFDS -p 4 -d Pressure_Solver dancing_eddies_uscarc.fds
 $QFDS -p 8 -d Pressure_Solver duct_flow.fds
-$QFDS -p 8 -d Pressure_Solver duct_flow_glmat.fds
+$QFDS -p 8 -d Pressure_Solver duct_flow_uglmat.fds
 $QFDS -p 8 -d Pressure_Solver duct_flow_uscarc.fds
 $QFDS -p 5 -d Pressure_Solver hallways.fds
 $QFDS -p 8 -d Pressure_Solver tunnel_demo.fds
@@ -372,6 +416,9 @@ $QFDS -d Radiation plate_view_factor_cart_100.fds
 $QFDS -d Radiation plate_view_factor_cyl_30.fds
 $QFDS -d Radiation plate_view_factor_cyl_60.fds
 $QFDS -d Radiation plate_view_factor_cyl_100.fds
+$QFDS -d Radiation plate_view_factor_ibm_30.fds
+$QFDS -d Radiation plate_view_factor_ibm_60.fds
+$QFDS -d Radiation plate_view_factor_ibm_100.fds
 $QFDS -d Radiation radiating_polygon_square_20.fds
 $QFDS -d Radiation radiating_polygon_square_40.fds
 $QFDS -d Radiation radiating_polygon_square_80.fds
@@ -435,11 +482,6 @@ $QFDS -d Species methane_flame_lumped_fuel.fds
 $QFDS -d Species methane_flame_lumped_ox.fds
 $QFDS -d Species propane_flame_2reac.fds
 $QFDS -d Species propane_flame_2reac_simple.fds
-$QFDS -d Species propane_flame_deposition.fds
-$QFDS -d Species propane_flame_deposition_none.fds
-$QFDS -d Species propane_flame_deposition_gravitational.fds
-$QFDS -d Species propane_flame_deposition_thermophoretic.fds
-$QFDS -d Species propane_flame_deposition_turbulent.fds
 $QFDS -d Species reactionrate_arrhenius_0order_1step.fds
 $QFDS -d Species reactionrate_arrhenius_2order_1step.fds
 $QFDS -d Species reactionrate_arrhenius_1p75order_2step.fds
@@ -457,8 +499,6 @@ $QFDS -d Species reactionrate_lumped_two_air.fds
 $QFDS -d Species reactionrate_lumped_two_air_2.fds
 $QFDS -d Species reactionrate_series_reaction.fds
 $QFDS -d Species pvc_combustion.fds
-$QFDS -d Species soot_gravitational_settling.fds
-$QFDS -d Species soot_gravitational_settling_2.fds
 $QFDS -d Species hrrpuv_reac_simple.fds
 $QFDS -d Species hrrpuv_reac_extinction.fds
 $QFDS -d Species hrrpuv_reac_single.fds

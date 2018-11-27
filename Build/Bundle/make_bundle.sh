@@ -1,5 +1,4 @@
 #!/bin/bash
-
 platform="linux"
 if [ "`uname`" == "Darwin" ]; then
   platform="osx"
@@ -28,7 +27,7 @@ fi
 
 function usage {
 echo "Usage:"
-echo "make_installer.sh [options]"
+echo "make_bundle.sh [options]"
 echo ""
 echo "Create an installer named ${fds_version}-${smv_version}_${platform}64.sh"
 echo "Options:"
