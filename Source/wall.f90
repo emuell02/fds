@@ -2708,7 +2708,7 @@ PYROLYSIS_PREDICTED_IF: IF (SF%PYROLYSIS_MODEL==PYROLYSIS_PREDICTED) THEN
             CASE ('CHAR')
                RSCHR=SUM(ML%NU_RESIDUE(:,:))
             CASE ('ASH')
-               MASH=SUM(ONE_D%RHO(:,N))
+               MASH=SUM(ONE_D%MATL_COMP(N)%RHO(:))
          END SELECT
          IF (MASH .GT. MVG*RSVG*RSCHR*0.999) THEN
             ONE_D%BURNAWAY = .TRUE.
