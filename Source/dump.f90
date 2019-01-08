@@ -719,6 +719,9 @@ IF (N_DEVC_LINE>0) THEN
             CASE(4)
                LINE_DEVC_LABEL(NN) = TRIM(DV%R_ID)//','//TRIM(DV%ID)
                LINE_DEVC_UNITS(NN) = TRIM(DV%XYZ_UNITS)//','//TRIM(DV%UNITS)
+            CASE(5)
+               LINE_DEVC_LABEL(NN) = TRIM(DV%D_ID)//','//TRIM(DV%ID)
+               LINE_DEVC_UNITS(NN) = TRIM(DV%XYZ_UNITS)//','//TRIM(DV%UNITS)
             CASE(12)
                LINE_DEVC_LABEL(NN) = TRIM(DV%X_ID)//','//TRIM(DV%Y_ID)//','//TRIM(DV%ID)
                LINE_DEVC_UNITS(NN) = TRIM(DV%XYZ_UNITS)//','//TRIM(DV%XYZ_UNITS)//','//TRIM(DV%UNITS)
@@ -977,15 +980,15 @@ CALL ChkMemErr('DUMP','IBLK',IZERO)
         IF (M%N_STRINGS+5>M%N_STRINGS_MAX) CALL RE_ALLOCATE_STRINGS(NM)
         M%N_STRINGS = M%N_STRINGS + 1
         IF (IS%INDEX2 .EQ. -1 ) THEN
-           WRITE(M%STRING(M%N_STRINGS),'(A,I6,1X,I6)') 'ISOG',NM,IS%SKIP
+           WRITE(M%STRING(M%N_STRINGS),'(A,I6,1X,I6,1X,E13.6)') 'ISOG',NM,IS%SKIP,IS%DELTA
         ELSE
-           WRITE(M%STRING(M%N_STRINGS),'(A,I6,1X,I6)') 'TISOG',NM,IS%SKIP
+           WRITE(M%STRING(M%N_STRINGS),'(A,I6,1X,I6,1X,E13.6)') 'TISOG',NM,IS%SKIP,IS%DELTA
         ENDIF
         M%N_STRINGS = M%N_STRINGS + 1
         WRITE(M%STRING(M%N_STRINGS),'(1X,A)') TRIM(FN_ISOF(N,NM)) ! geometry
         IF (IS%INDEX2 /= -1 ) THEN
            M%N_STRINGS = M%N_STRINGS + 1
-           WRITE(M%STRING(M%N_STRINGS),'(1X,A)') TRIM(FN_ISOF2(N,NM)) ! data 
+           WRITE(M%STRING(M%N_STRINGS),'(1X,A)') TRIM(FN_ISOF2(N,NM)) ! data
         ENDIF
         M%N_STRINGS = M%N_STRINGS + 1
         WRITE(M%STRING(M%N_STRINGS),'(1X,A)') TRIM(IS%SMOKEVIEW_LABEL) ! labels for geometry
@@ -1090,9 +1093,11 @@ DO N=1,M%N_SLCF
       SLICEOFFSET = ''
       IF(SL%SMV_OFFSET/=0.0_EB)WRITE(SLICEOFFSET,'(A,F10.4)')' $ ',SL%SMV_OFFSET
       IF (SL%ID/='null') THEN
-         WRITE(SLICELABEL,'(A,A,A,A,A,A)') ' # ',TRIM(SL%SLICETYPE),' %',TRIM(SL%ID),TRIM(SLICEPARMS),TRIM(SLICEOFFSET)
+         WRITE(SLICELABEL,'(A,A,A,A,A,A,A,I6)') ' # ',TRIM(SL%SLICETYPE),' %',TRIM(SL%ID),TRIM(SLICEPARMS),TRIM(SLICEOFFSET),&
+                                                ' ! ',SL%SLCF_INDEX
       ELSE
-         WRITE(SLICELABEL,'(A,A,A,A)') ' # ',TRIM(SL%SLICETYPE),TRIM(SLICEPARMS),TRIM(SLICEOFFSET)
+         WRITE(SLICELABEL,'(A,A,A,A,A,I6)') ' # ',TRIM(SL%SLICETYPE),TRIM(SLICEPARMS),TRIM(SLICEOFFSET),&
+                                            ' ! ',SL%SLCF_INDEX
       ENDIF
       IF (SL%SLICETYPE=='STRUCTURED') THEN
          IF (.NOT.SL%TERRAIN_SLICE .AND. .NOT.SL%CELL_CENTERED) THEN
@@ -1400,9 +1405,20 @@ INTEGER :: TYPE_INDICATOR
 TYPE(GEOMETRY_TYPE), POINTER :: G=>NULL()
 INTEGER :: IG
 
-! If this is an MPI job and this is not the master node, open the .smv file only if this is not a RESTART case
+! If this is a RESTART case but an old .smv file does not exist, shutdown with an ERROR.
+
+INQUIRE(FILE=FN_SMV,EXIST=EX)
+IF (.NOT.EX .AND. APPEND) THEN
+   WRITE(MESSAGE,'(A,A,A)') "ERROR: The file, ",TRIM(FN_SMV),", does not exist. Set RESTART=.FALSE."
+   CALL SHUTDOWN(MESSAGE) ; RETURN
+ENDIF
+
+! If this is a RESTART case, there is no need to open the .smv file except for Process 0.
 
 IF (MYID>0 .AND. APPEND) RETURN
+
+! In cases where the MPI processes write to their own .smv file, give each .smv file for the MPI processes 
+! greater than 0 a unique name.
 
 IF (MYID>0 .AND.      SHARED_FILE_SYSTEM) OPEN(LU_SMV,FILE=FN_SMV,FORM='FORMATTED', STATUS='OLD',POSITION='APPEND')
 
@@ -1411,7 +1427,7 @@ IF (MYID>0 .AND. .NOT.SHARED_FILE_SYSTEM) THEN
    OPEN(LU_SMV,FILE=PROCESS_FN_SMV,FORM='FORMATTED', STATUS='REPLACE')
 ENDIF
 
-! Do the following printouts only for master node
+! Do the following printouts only for MPI Process 0.
 
 MASTER_NODE_IF: IF (MYID==0) THEN
 
@@ -1430,12 +1446,6 @@ WRITE(LU_INFO,'(A)') ' '
 CLOSE(LU_INFO)
 
 ! Open up the Smokeview ".smv" file
-
-INQUIRE(FILE=FN_SMV,EXIST=EX)
-IF (.NOT.EX .AND. APPEND) THEN
-   WRITE(MESSAGE,'(A,A,A)') "ERROR: The file, ",TRIM(FN_SMV),", does not exist. Set RESTART=.FALSE."
-   CALL SHUTDOWN(MESSAGE)
-ENDIF
 
 IF (APPEND) THEN
    OPEN(LU_SMV,FILE=FN_SMV,FORM='FORMATTED', STATUS='OLD',POSITION='APPEND')
@@ -2550,6 +2560,8 @@ ELSE
    OPEN(LU_OUTPUT,FILE=FN_OUTPUT,FORM='FORMATTED',STATUS='REPLACE')
 ENDIF
 
+OUT_FILE_OPENED = .TRUE.
+
 ! Write out the input parameters to output file (unit 6)
 
 CALL WRITE_SUMMARY_INFO(LU_OUTPUT)
@@ -2943,7 +2955,7 @@ PROPERTY_LOOP: DO N=1,N_PROP
    WRITE(LU_OUTPUT,'(/I4,1X,A)')  N,TRIM(PY%ID)
    QUANTITY = PY%QUANTITY
    SELECT CASE(QUANTITY)
-      CASE('NOZZLE')
+      CASE('NOZZLE FLOW RATE')
          WRITE(LU_OUTPUT,'(A,F8.2)') '     Flow Rate (L/min)           ', PY%FLOW_RATE
          WRITE(LU_OUTPUT,'(A,A   )') '     Particle Class              ', TRIM(PY%PART_ID)
       CASE('SPRINKLER LINK TEMPERATURE')
@@ -3264,7 +3276,7 @@ SUBROUTINE READ_RESTART(T,DT,NM)
 
 ! Read data from a previous calculation
 
-USE COMP_FUNCTIONS, ONLY:SHUTDOWN
+USE COMP_FUNCTIONS, ONLY: SHUTDOWN
 USE MEMORY_FUNCTIONS, ONLY: REALLOCATE,ALLOCATE_STORAGE
 REAL(EB), INTENT(OUT) :: T,DT
 INTEGER :: NOM,N,N_T_E_MAX,NS
@@ -3280,7 +3292,7 @@ IF (EVACUATION_ONLY(NM)) RETURN ! No restart for evacuation
 INQUIRE(FILE=FN_RESTART(NM),EXIST=EX)
 IF (.NOT.EX) THEN
    WRITE(MESSAGE,'(A,A,A)') "ERROR: The file, ",TRIM(FN_RESTART(NM)),", does not exist in the current directory"
-   CALL SHUTDOWN(MESSAGE)
+   CALL SHUTDOWN(MESSAGE,PROCESS_0_ONLY=.FALSE.) ; RETURN
 ENDIF
 
 OPEN(LU_RESTART(NM),FILE=FN_RESTART(NM),FORM='UNFORMATTED',STATUS='OLD')
@@ -3614,12 +3626,6 @@ LAGRANGIAN_PARTICLE_CLASS_LOOP: DO N=1,N_LAGRANGIAN_CLASSES
       ZP(NPP) = LP%Z
       DO NN=1,LPC%N_QUANTITIES
          SELECT CASE(LPC%QUANTITIES_INDEX(NN))
-            CASE( 6)  ! U-VELOCITY
-               QP(NPP,NN) = LP%U
-            CASE( 7)  ! V-VELOCITY
-               QP(NPP,NN) = LP%V
-            CASE( 8)  ! W-VELOCITY
-               QP(NPP,NN) = LP%W
             CASE(434)  ! PARTICLE DIAMETER
                QP(NPP,NN) = 2.E6*SUM(LP%ONE_D%LAYER_THICKNESS)
             CASE(435)  ! PARTICLE VELOCITY
@@ -3634,6 +3640,18 @@ LAGRANGIAN_PARTICLE_CLASS_LOOP: DO N=1,N_LAGRANGIAN_CLASSES
                QP(NPP,NN) = T-LP%T_INSERT
             CASE(440)  ! PARTICLE WEIGHTING FACTOR
                QP(NPP,NN) = LP%PWT
+            CASE(441)  ! PARTICLE X
+               QP(NPP,NN) = LP%X
+            CASE(442)  ! PARTICLE Y
+               QP(NPP,NN) = LP%Y
+            CASE(443)  ! PARTICLE Z
+               QP(NPP,NN) = LP%Z
+            CASE(444)  ! PARTICLE U
+               QP(NPP,NN) = LP%U
+            CASE(445)  ! PARTICLE V
+               QP(NPP,NN) = LP%V
+            CASE(446)  ! PARTICLE W
+               QP(NPP,NN) = LP%W
             CASE(:-1)  ! Any solid phase quantity (assume Z_INDEX=-1 for now)
                QP(NPP,NN) = SOLID_PHASE_OUTPUT(NM,ABS(LPC%QUANTITIES_INDEX(NN)),LPC%QUANTITIES_Y_INDEX(NN),&
                                                LPC%QUANTITIES_Z_INDEX(NN),N,OPT_LP_INDEX=I)
@@ -3776,7 +3794,7 @@ ISOF_LOOP: DO N=1,N_ISOF
    ENDIF
 
    CALL ISO_TO_FILE(LU_ISOF(N,NM),LU_ISOF2(N,NM),NM,IBAR,JBAR,KBAR,STIME,QQ,QQ2,HAVE_ISO2,&
-        IS%VALUE(1:IS%N_VALUES), IS%N_VALUES, IBLK, IS%SKIP, XPLT, IBP1, YPLT, JBP1, ZPLT, KBP1)
+        IS%VALUE(1:IS%N_VALUES), IS%N_VALUES, IBLK, IS%SKIP, IS%DELTA, XPLT, IBP1, YPLT, JBP1, ZPLT, KBP1)
 
 ENDDO ISOF_LOOP
 
@@ -4918,9 +4936,9 @@ END SUBROUTINE DUMP_SLICE_GEOM
 ! ---------------------------- DUMP_SLICE_GEOM_DATA ----------------------------------------
 
 SUBROUTINE DUMP_SLICE_GEOM_DATA(NM,FUNIT,CC_FACE_CENTERED,CC_CELL_CENTERED,SLICETYPE, &
-                                HEADER,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX)
+                                HEADER,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX,DEBUG)
 CHARACTER(*), INTENT(IN) :: SLICETYPE
-INTEGER, INTENT(IN) :: NM, FUNIT, HEADER, I1, I2, J1, J2, K1, K2, IND, Y_INDEX, Z_INDEX
+INTEGER, INTENT(IN) :: NM, FUNIT, HEADER, I1, I2, J1, J2, K1, K2, IND, Y_INDEX, Z_INDEX, DEBUG
 REAL(FB), INTENT(IN):: STIME
 LOGICAL, INTENT(IN) :: CC_FACE_CENTERED,CC_CELL_CENTERED
 
@@ -4946,13 +4964,16 @@ ENDIF
 WRITE(FUNIT) STIME
 WRITE(FUNIT) ZERO_INTEGER, ZERO_INTEGER, ZERO_INTEGER, NFACES
 IF (NVERTS>0 .AND. NFACES>0) THEN
-   WRITE(FUNIT) (VALS(I),I=1,NFACES)
+   IF (DEBUG .EQ. 0) THEN
+      WRITE(FUNIT) (VALS(I),I=1,NFACES)
+   ELSE
+      WRITE(FUNIT) (REAL(100*NM,FB),I=1,NFACES)
+   ENDIF
    DEALLOCATE(VALS)
 ENDIF
 
 END SUBROUTINE
 
-! ---------------------------- DUMP_SLCF ----------------------------------------
 
 SUBROUTINE DUMP_SLCF(T,DT,NM,IFRMT)
 
@@ -4963,11 +4984,12 @@ USE GEOMETRY_FUNCTIONS, ONLY: SEARCH_OTHER_MESHES
 USE TRAN, ONLY : GET_IJK
 INTEGER, INTENT(IN) :: NM,IFRMT
 REAL(EB), INTENT(IN) :: T,DT
-REAL(EB) :: SUM,TT
+REAL(EB) :: BSUM,TT
 INTEGER :: I,J,K,NQT,I1,I2,J1,J2,K1,K2,ITM,ITM1,IQ,IQQ,IND,IND2,II1,II2,JJ1,JJ2,KK1,KK2, &
            IC,Y_INDEX,Z_INDEX,PART_INDEX,VELO_INDEX,PROP_INDEX,REAC_INDEX,MATL_INDEX,NOM,IIO,JJO,KKO
 INTEGER :: KTS,NTSL
-REAL(EB), POINTER, DIMENSION(:,:,:) :: C,B,S,QUANTITY
+REAL(EB), POINTER, DIMENSION(:,:,:) :: B,S,QUANTITY
+INTEGER, POINTER, DIMENSION(:,:,:) :: C
 REAL(FB) :: ZERO,STIME
 LOGICAL :: PLOT3D,SLCF3D
 LOGICAL :: AGL_TERRAIN_SLICE,CC_CELL_CENTERED,CC_FACE_CENTERED
@@ -4988,24 +5010,16 @@ CALL POINT_TO_MESH(NM)
 
 ! Create an array, C, that is 1 at cell faces (I,J,K) for which U, V, and W are defined and 0 otherwise.
 
-C => WORK3
-C = 1._EB
-
-C(0,0,0:KBP1) = 0._EB
-C(0,JBP1,0:KBP1) = 0._EB
-C(IBP1,0,0:KBP1) = 0._EB
-C(IBP1,JBP1,0:KBP1) = 0._EB
-C(0:IBP1,0,0) = 0._EB
-C(0:IBP1,0,KBP1) = 0._EB
-C(0:IBP1,JBP1,0) = 0._EB
-C(0:IBP1,JBP1,KBP1) = 0._EB
-C(0,0:JBP1,0) = 0._EB
-C(0,0:JBP1,KBP1) = 0._EB
-C(IBP1,0:JBP1,0) = 0._EB
-C(IBP1,0:JBP1,KBP1) = 0._EB
-
-IF (TWO_D) C(:,   0,:) = 0._EB
-IF (TWO_D) C(:,JBP1,:) = 0._EB
+C => IWORK1
+C = 0
+DO K=0,KBP1
+   DO J=0,JBP1
+      DO I=0,IBP1
+         IC = CELL_INDEX(I,J,K)
+         IF (SOLID(IC) .OR. EXTERIOR(IC)) C(I,J,K) = 1
+      ENDDO
+   ENDDO
+ENDDO
 
 ! Create an array, B, that is 1 in any cell that is to be included in the 8-cell corner average, 0 otherwise.
 
@@ -5028,8 +5042,8 @@ S = 0._EB
 DO K=0,KBAR
    DO J=0,JBAR
       DO I=0,IBAR
-         SUM = B(I,J,K)+B(I+1,J+1,K+1)+B(I+1,J,K)+B(I,J+1,K)+B(I,J,K+1)+B(I+1,J+1,K)+B(I+1,J,K+1)+B(I,J+1,K+1)
-         IF (SUM>0._EB) S(I,J,K) = 1._EB/SUM
+         BSUM = B(I,J,K)+B(I+1,J+1,K+1)+B(I+1,J,K)+B(I,J+1,K)+B(I,J,K+1)+B(I+1,J+1,K)+B(I+1,J,K+1)+B(I,J+1,K+1)
+         IF (BSUM>0._EB) S(I,J,K) = 1._EB/BSUM
       ENDDO
    ENDDO
 ENDDO
@@ -5188,18 +5202,7 @@ QUANTITY_LOOP: DO IQ=1,NQT
                CASE(CELL_CENTER)
                   QQ(I,J,K,IQQ) = REAL(CORNER_VALUE(QUANTITY,B,S,IND),FB)
                CASE(CELL_FACE)
-                  QQ(I,J,K,IQQ) = REAL(FACE_VALUE(QUANTITY,C,OUTPUT_QUANTITY(IND)%IOR,IND),FB)
-                  IC = CELL_INDEX(I,J,K)
-                  IF (IC>0) THEN
-                     SELECT CASE(IND)
-                        CASE(6)
-                           IF (UVW_GHOST(IC,1)>-1.E5_EB) QQ(I,J,K,IQQ) = REAL(UVW_GHOST(IC,1),FB)
-                        CASE(7)
-                           IF (UVW_GHOST(IC,2)>-1.E5_EB) QQ(I,J,K,IQQ) = REAL(UVW_GHOST(IC,2),FB)
-                        CASE(8)
-                           IF (UVW_GHOST(IC,3)>-1.E5_EB) QQ(I,J,K,IQQ) = REAL(UVW_GHOST(IC,3),FB)
-                     END SELECT
-                  ENDIF
+                  QQ(I,J,K,IQQ) = REAL(FACE_VALUE(),FB)
                CASE(CELL_EDGE)
                   QQ(I,J,K,IQQ) = REAL(EDGE_VALUE(QUANTITY,S,IND),FB)
             END SELECT
@@ -5254,13 +5257,13 @@ QUANTITY_LOOP: DO IQ=1,NQT
 
             OPEN(LU_SLCF(IQ,NM),FILE=FN_SLCF(IQ,NM),FORM='UNFORMATTED',STATUS='REPLACE')
             CALL DUMP_SLICE_GEOM_DATA(NM,LU_SLCF(IQ,NM),SL%FACE_CENTERED,SL%CELL_CENTERED,SL%SLICETYPE, &
-                                      1,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX)
+                                      1,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX,0)
             CLOSE(LU_SLCF(IQ,NM))
          ELSE
          ! data file at subsequent time steps
             OPEN(LU_SLCF(IQ,NM),FILE=FN_SLCF(IQ,NM),FORM='UNFORMATTED',STATUS='OLD',POSITION='APPEND')
             CALL DUMP_SLICE_GEOM_DATA(NM,LU_SLCF(IQ,NM),SL%FACE_CENTERED,SL%CELL_CENTERED,SL%SLICETYPE, &
-                                      0,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX)
+                                      0,STIME,I1,I2,J1,J2,K1,K2,IND,Y_INDEX,Z_INDEX,0)
             CLOSE(LU_SLCF(IQ,NM))
          ENDIF
       ENDIF
@@ -5298,40 +5301,92 @@ ENDIF
 END FUNCTION CORNER_VALUE
 
 
-REAL(EB) FUNCTION FACE_VALUE(A,C,IOR,INDX)
+REAL(EB) FUNCTION FACE_VALUE()
 
-REAL(EB), INTENT(IN), DIMENSION(0:,0:,0:) :: A,C
-INTEGER, INTENT(IN) :: IOR,INDX
-REAL(EB) :: SUM
+REAL(EB) :: AA(0:1,0:1),WGT(0:1,0:1)
+INTEGER :: II,JJ,KK,IIM,JJM,KKM,ICX,ICY,ICZ
+LOGICAL :: SET(0:1,0:1)
 
-SELECT CASE(IOR)
-   CASE(1)
-      SUM = MAX(C(I,J,K),C(I+1,J,K))+MAX(C(I,J,K+1),C(I+1,J,K+1))+MAX(C(I,J+1,K),C(I+1,J+1,K))+MAX(C(I,J+1,K+1),C(I+1,J+1,K+1))
-      IF (ABS(SUM)<=TWO_EPSILON_EB) THEN
-         FACE_VALUE = OUTPUT_QUANTITY(INDX)%AMBIENT_VALUE
-      ELSE
-         FACE_VALUE = ( A(I,J,K)  *MAX(C(I,J,K),C(I+1,J,K))     + A(I,J,K+1)  *MAX(C(I,J,K+1),C(I+1,J,K+1)) + &
-                        A(I,J+1,K)*MAX(C(I,J+1,K),C(I+1,J+1,K)) + A(I,J+1,K+1)*MAX(C(I,J+1,K+1),C(I+1,J+1,K+1)) )/SUM
-      ENDIF
-   CASE(2)
-      SUM = MAX(C(I,J,K),C(I,J+1,K))+MAX(C(I,J,K+1),C(I,J+1,K+1))+MAX(C(I+1,J,K),C(I+1,J+1,K))+MAX(C(I+1,J,K+1),C(I+1,J+1,K+1))
-      IF (ABS(SUM)<=TWO_EPSILON_EB) THEN
-         FACE_VALUE = OUTPUT_QUANTITY(INDX)%AMBIENT_VALUE
-      ELSE
-         FACE_VALUE = ( A(I,J,K)  *MAX(C(I,J,K),C(I,J+1,K))     + A(I,J,K+1)  *MAX(C(I,J,K+1),C(I,J+1,K+1)) + &
-                        A(I+1,J,K)*MAX(C(I+1,J,K),C(I+1,J+1,K)) + A(I+1,J,K+1)*MAX(C(I+1,J,K+1),C(I+1,J+1,K+1)) )/SUM
-      ENDIF
-   CASE(3)
-      SUM = MAX(C(I,J,K),C(I,J,K+1))+MAX(C(I+1,J,K),C(I+1,J,K+1))+MAX(C(I,J+1,K),C(I,J+1,K+1))+MAX(C(I+1,J+1,K),C(I+1,J+1,K+1))
-      IF (ABS(SUM)<=TWO_EPSILON_EB) THEN
-         FACE_VALUE = OUTPUT_QUANTITY(INDX)%AMBIENT_VALUE
-      ELSE
-         FACE_VALUE = ( A(I,J,K)  *MAX(C(I,J,K),C(I,J,K+1))     + A(I+1,J,K)  *MAX(C(I+1,J,K),C(I+1,J,K+1)) + &
-                        A(I,J+1,K)*MAX(C(I,J+1,K),C(I,J+1,K+1)) + A(I+1,J+1,K)*MAX(C(I+1,J+1,K),C(I+1,J+1,K+1)) )/SUM
-      ENDIF
+SELECT CASE(OUTPUT_QUANTITY(IND)%IOR)
+   CASE(1) ; AA(0:1,0:1) = QUANTITY(I,J:J+1,K:K+1)
+   CASE(2) ; AA(0:1,0:1) = QUANTITY(I:I+1,J,K:K+1)
+   CASE(3) ; AA(0:1,0:1) = QUANTITY(I:I+1,J:J+1,K)
 END SELECT
+WGT  = 0.25_EB
+IC = CELL_INDEX(I,J,K)
+IF (IC>0) THEN
+   SET = .FALSE.
+   SELECT CASE(IND)
+      CASE(6)
+         DO KK=0,1
+            DO JJ=0,1
+               IF (C(I,J+JJ,K+KK)==1 .AND.  C(I+1,J+JJ,K+KK)==1) THEN
+                  JJM = MOD(JJ+1,2)
+                  KKM = MOD(KK+1,2)
+                  ICY = CELL_INDEX(I,J,K+KK)
+                  ICZ = CELL_INDEX(I,J+JJ,K)
+                  IF (U_EDGE_Y(ICY)>-1.E5_EB .AND.  .NOT.SET(JJ,KK)) THEN
+                     AA(JJ,KK) = 2._EB*U_EDGE_Y(ICY) - AA(JJM,KK)
+                     SET(JJ,KK) = .TRUE.
+                  ENDIF
+                  IF (U_EDGE_Z(ICZ)>-1.E5_EB .AND.  .NOT.SET(JJ,KK)) THEN
+                     AA(JJ,KK) = 2._EB*U_EDGE_Z(ICZ) - AA(JJ,KKM)
+                     SET(JJ,KK) = .TRUE.
+                  ENDIF
+                  IF (.NOT.SET(JJ,KK)) WGT(JJ,KK) = 0._EB
+               ENDIF
+            ENDDO
+         ENDDO
+      CASE(7)
+         DO KK=0,1
+            DO II=0,1
+               IF (C(I+II,J,K+KK)==1 .AND.  C(I+II,J+1,K+KK)==1) THEN
+                  IIM = MOD(II+1,2)
+                  KKM = MOD(KK+1,2)
+                  ICX = CELL_INDEX(I,J,K+KK)
+                  ICZ = CELL_INDEX(I+II,J,K)
+                  IF (V_EDGE_X(ICX)>-1.E5_EB .AND.  .NOT.SET(II,KK)) THEN
+                     AA(II,KK) = 2._EB*V_EDGE_X(ICX) - AA(IIM,KK)
+                     SET(II,KK) = .TRUE.
+                  ENDIF
+                  IF (V_EDGE_Z(ICZ)>-1.E5_EB .AND.  .NOT.SET(II,KK)) THEN
+                     AA(II,KK) = 2._EB*V_EDGE_Z(ICZ) - AA(II,KKM)
+                     SET(II,KK) = .TRUE.
+                  ENDIF
+                  IF (.NOT.SET(II,KK)) WGT(II,KK) = 0._EB
+               ENDIF
+            ENDDO
+         ENDDO
+      CASE(8)
+         DO JJ=0,1
+            DO II=0,1
+               IF (C(I+II,J+JJ,K)==1 .AND.  C(I+II,J+JJ,K+1)==1) THEN
+                  IIM = MOD(II+1,2)
+                  JJM = MOD(JJ+1,2)
+                  ICX = CELL_INDEX(I,J+JJ,K)
+                  ICY = CELL_INDEX(I+II,J,K)
+                  IF (W_EDGE_X(ICX)>-1.E5_EB .AND.  .NOT.SET(II,JJ)) THEN
+                     AA(II,JJ) = 2._EB*W_EDGE_X(ICX) - AA(IIM,JJ)
+                     SET(II,JJ) = .TRUE.
+                  ENDIF
+                  IF (W_EDGE_Y(ICY)>-1.E5_EB .AND.  .NOT.SET(II,JJ)) THEN
+                     AA(II,JJ) = 2._EB*W_EDGE_Y(ICY) - AA(II,JJM)
+                     SET(II,JJ) = .TRUE.
+                  ENDIF
+                  IF (.NOT.SET(II,JJ)) WGT(II,JJ) = 0._EB
+               ENDIF
+            ENDDO
+         ENDDO
+   END SELECT
+ENDIF
+IF (SUM(WGT)>0._EB) THEN
+   FACE_VALUE = SUM(AA*WGT)/SUM(WGT)
+ELSE
+   FACE_VALUE = OUTPUT_QUANTITY(IND)%AMBIENT_VALUE
+ENDIF
 
 END FUNCTION FACE_VALUE
+
 
 REAL(EB) FUNCTION EDGE_VALUE(A,S,INDX)
 
@@ -5568,6 +5623,17 @@ DEVICE_LOOP: DO N=1,N_DEVC
                                        SDV%VALUE_1 = SDV%VALUE_1 + DX(I)*RC(I)*DY(J)*VALUE
                                     END SELECT
                               ENDIF
+                           CASE('AREA')
+                              IF (VALUE <= DV%QUANTITY_RANGE(2) .AND. VALUE >=DV%QUANTITY_RANGE(1)) THEN
+                                 SELECT CASE (ABS(DV%IOR_ASSUMED))
+                                    CASE(1)
+                                       SDV%VALUE_1 = SDV%VALUE_1 + RC(I)*DY(J)*DZ(K)
+                                    CASE(2)
+                                       SDV%VALUE_1 = SDV%VALUE_1 + DX(I)*DZ(K)
+                                    CASE(3)
+                                       SDV%VALUE_1 = SDV%VALUE_1 + DX(I)*RC(I)*DY(J)
+                                    END SELECT
+                              ENDIF
                            CASE('VOLUME')
                               IF (VALUE <= DV%QUANTITY_RANGE(2) .AND. VALUE >=DV%QUANTITY_RANGE(1)) &
                                  SDV%VALUE_1 = SDV%VALUE_1 + VOL
@@ -5778,7 +5844,7 @@ USE MANUFACTURED_SOLUTIONS, ONLY: UF_MMS,WF_MMS,VD2D_MMS_P_3,VD2D_MMS_H_3
 
 REAL(EB), INTENT(IN) :: T,DT
 INTEGER, INTENT(IN) :: II,JJ,KK,IND,IND2,NM,VELO_INDEX,PIPE_INDEX,PROP_INDEX,REAC_INDEX,MATL_INDEX
-REAL(EB) :: FLOW,HMFAC,H_TC,TMP_TC,RE_D,NUSSELT,AREA,VEL,K_G,MU_G,DUMMY,&
+REAL(EB) :: FLOW,HMFAC,H_TC,TMP_TC,RE_D,NUSSELT,AREA,VEL,K_G,MU_G,DUMMY,DROPLET_COOLING,&
             Q_SUM,TMP_G,UU,VV,WW,VEL2,Y_MF_INT,PATHLENGTH,EXT_COEF,MASS_EXT_COEF,ZZ_FUEL,ZZ_OX,&
             VELSR,WATER_VOL_FRAC,RHS,DT_C,DT_E,T_RATIO,Y_E_LAG, H_G,H_G_SUM,CPBAR,CP,ZZ_GET(1:N_TRACKED_SPECIES),RCON,&
             EXPON,Y_SPECIES,MEC,Y_SPECIES2,Y_H2O,R_Y_H2O,R_DN,SGN,Y_ALL(N_SPECIES),H_S,D_Z_N(0:5000),&
@@ -6190,7 +6256,7 @@ IND_SELECT: SELECT CASE(IND)
       IF (IW>0) THEN
          IF (WALL(IW)%BOUNDARY_TYPE==SOLID_BOUNDARY) THEN
             WRITE(MESSAGE,'(A)') "ERROR: Output QUANTITY 'MASS FLUX' not appropriate at solid boundary"
-            CALL SHUTDOWN(MESSAGE)
+            CALL SHUTDOWN(MESSAGE,PROCESS_0_ONLY=.FALSE.)
           ENDIF
       ENDIF
 
@@ -6442,6 +6508,9 @@ IND_SELECT: SELECT CASE(IND)
          GAS_PHASE_OUTPUT_RES = 0._EB
       ENDIF
 
+   CASE(153) ! NOZZLE FLOW RATE
+      GAS_PHASE_OUTPUT_RES = PY%FLOW_RATE
+
    CASE(154:155) ! TRANSMISSION, PATH OBSCURATION
       EXT_COEF   = 0._EB
       IF (PY%Y_INDEX>0) THEN
@@ -6478,16 +6547,21 @@ IND_SELECT: SELECT CASE(IND)
       VEL2  = 0.25_EB*( (U(I,J,K)+U(I-1,J,K))**2 +(V(I,J,K)+V(I,J-1,K))**2 + (W(I,J,K)+W(I,J,K-1))**2 )
       VEL   = SQRT(VEL2)
       VELSR = SQRT(VEL)
+      WATER_VOL_FRAC = 0._EB
       IF (H2O_INDEX > 0) THEN
-         WATER_VOL_FRAC = 0._EB
          DO NN = 1,N_LAGRANGIAN_CLASSES
             IF (LAGRANGIAN_PARTICLE_CLASS(NN)%Y_INDEX==H2O_INDEX) WATER_VOL_FRAC = WATER_VOL_FRAC + &
                AVG_DROP_DEN(I,J,K,LAGRANGIAN_PARTICLE_CLASS(NN)%ARRAY_INDEX)/LAGRANGIAN_PARTICLE_CLASS(NN)%DENSITY
          ENDDO
       ENDIF
-      RHS      = ( VELSR*(TMP_G-DV%TMP_L) - PY%C_FACTOR*(DV%TMP_L-TMPA) - C_DIMARZO*VEL*WATER_VOL_FRAC )/PY%RTI
-      DV%TMP_L = MAX(TMPA,DV%TMP_L + DT*RHS)
-      GAS_PHASE_OUTPUT_RES      = DV%TMP_L - TMPM
+      IF (DV%TMP_L>PY%INITIAL_TEMPERATURE) THEN
+         DROPLET_COOLING = C_DIMARZO*VEL*WATER_VOL_FRAC
+      ELSE
+         DROPLET_COOLING = 0._EB
+      ENDIF
+      RHS      = ( VELSR*(TMP_G-DV%TMP_L) - PY%C_FACTOR*(DV%TMP_L-PY%INITIAL_TEMPERATURE) - DROPLET_COOLING )/PY%RTI
+      DV%TMP_L = DV%TMP_L + DT*RHS
+      GAS_PHASE_OUTPUT_RES = DV%TMP_L - TMPM
 
    CASE(157) ! LINK TEMPERATURE
       I = DV%I
@@ -7138,8 +7212,13 @@ SOLID_PHASE_SELECT: SELECT CASE(INDX)
       SOLID_PHASE_OUTPUT = ONE_D%EMISSIVITY
 
    CASE(29) ! SURFACE DEPOSITION
-      IF (Z_INDEX>0) SOLID_PHASE_OUTPUT = WC%AWM_AEROSOL(SPECIES_MIXTURE(Z_INDEX)%AWM_INDEX)
-      IF (Y_INDEX>0) SOLID_PHASE_OUTPUT = WC%AWM_AEROSOL(SPECIES(Y_INDEX)%AWM_INDEX)
+      IF (PRESENT(OPT_WALL_INDEX)) THEN
+         IF (Z_INDEX>0) SOLID_PHASE_OUTPUT = WC%AWM_AEROSOL(SPECIES_MIXTURE(Z_INDEX)%AWM_INDEX)
+         IF (Y_INDEX>0) SOLID_PHASE_OUTPUT = WC%AWM_AEROSOL(SPECIES(Y_INDEX)%AWM_INDEX)
+      ELSEIF (PRESENT(OPT_CFACE_INDEX)) THEN
+         IF (Z_INDEX>0) SOLID_PHASE_OUTPUT = CFA%AWM_AEROSOL(SPECIES_MIXTURE(Z_INDEX)%AWM_INDEX)
+         IF (Y_INDEX>0) SOLID_PHASE_OUTPUT = CFA%AWM_AEROSOL(SPECIES(Y_INDEX)%AWM_INDEX)
+      ENDIF
 
    CASE(30) ! MPUA
       LPC => LAGRANGIAN_PARTICLE_CLASS(PART_INDEX)
@@ -7240,7 +7319,11 @@ SOLID_PHASE_SELECT: SELECT CASE(INDX)
       SOLID_PHASE_OUTPUT = ONE_D%MU_G
 
    CASE(39) ! DEPOSITION VELOCITY
-      SOLID_PHASE_OUTPUT = WC%V_DEP
+      IF (PRESENT(OPT_WALL_INDEX)) THEN
+         SOLID_PHASE_OUTPUT = WC%V_DEP
+      ELSEIF (PRESENT(OPT_CFACE_INDEX)) THEN
+         SOLID_PHASE_OUTPUT = CFA%V_DEP
+      ENDIF
 
    CASE(41) ! WALL CELL COLOR (output VENT index for WC color)
       SOLID_PHASE_OUTPUT = REAL(WC%VENT_INDEX,EB)
@@ -8036,7 +8119,7 @@ IF (N_DEVC_LINE>0) THEN
          SELECT CASE(DV%LINE_COORD_CODE)
             CASE(0)
                LINE_DEVC_VALUE(DV%LINE,:) = 'NaN'
-            CASE(1:4)
+            CASE(1:5)
                LINE_DEVC_VALUE(DV%LINE,:) = 'NaN,NaN'
             CASE(12:23)
                LINE_DEVC_VALUE(DV%LINE,:) = 'NaN,NaN,NaN'
@@ -8066,6 +8149,10 @@ IF (N_DEVC_LINE>0) THEN
                WRITE(TCFORM,'(5A)') "(1(",FMT_R,",A),",FMT_R,")"
                WRITE(LINE_DEVC_VALUE(DV%LINE,DV%POINT),TCFORM) SQRT(DV%X**2+DV%Y**2+DV%Z**2)*DV%COORD_FACTOR, &
                                                                ',',DV%VALUE/DV%TIME_INTERVAL
+            CASE(5)
+               WRITE(TCFORM,'(5A)') "(1(",FMT_R,",A),",FMT_R,")"
+               WRITE(LINE_DEVC_VALUE(DV%LINE,DV%POINT),TCFORM) SQRT((DV%X-DV%X1)**2+(DV%Y-DV%Y1)**2+(DV%Z-DV%Z1)**2)&
+                                              *DV%COORD_FACTOR,',',DV%VALUE/DV%TIME_INTERVAL
             CASE(12)
                WRITE(TCFORM,'(5A)') "(2(",FMT_R,",A),",FMT_R,")"
                WRITE(LINE_DEVC_VALUE(DV%LINE,DV%POINT),TCFORM) &
@@ -8506,6 +8593,7 @@ STIME = REAL(T_BEGIN + (T-T_BEGIN)*TIME_SHRINK_FACTOR,FB)
 CALL POINT_TO_MESH(NM)
 
 FILE_LOOP: DO NF=1,N_BNDF
+   IF (N_PATCH == 0) CYCLE FILE_LOOP
    BF => BOUNDARY_FILE(NF)
    PY => PROPERTY(BF%PROP_INDEX)
    WRITE(LU_BNDF(NF,NM)) STIME
@@ -8579,14 +8667,30 @@ FILE_LOOP: DO NF=1,N_BNDF
                ENDIF
             ENDDO
          ENDDO
-         WRITE(LU_BNDF(NF,NM)) ((PPN(L,N),L=L1-1,L2),N=N1-1,N2)
+         IF (BF%DEBUG .EQ. 0) THEN
+            WRITE(LU_BNDF(NF,NM)) ((PPN(L,N),L=L1-1,L2),N=N1-1,N2)
+         ELSE
+            WRITE(LU_BNDF(NF,NM)) ((REAL(100*NM,FB),L=L1-1,L2),N=N1-1,N2)
+         ENDIF
+
       ELSE
-         WRITE(LU_BNDF(NF,NM)) ((PP(L,N),L=L1,L2+1),N=N1,N2+1)
+         IF (BF%DEBUG .EQ. 0) THEN
+            WRITE(LU_BNDF(NF,NM)) ((PP(L,N),L=L1,L2+1),N=N1,N2+1)
+         ELSE
+            WRITE(LU_BNDF(NF,NM)) ((REAL(100*NM,FB),L=L1-1,L2),N=N1-1,N2)
+         ENDIF
       ENDIF
 
    ENDDO PATCH_LOOP
 
-   IF (CC_IBM) THEN
+ENDDO FILE_LOOP
+
+IF (CC_IBM) THEN
+   FILE_LOOP2 : DO NF=1,N_BNDF
+      BF => BOUNDARY_FILE(NF)
+      PY => PROPERTY(BF%PROP_INDEX)
+      IND  = ABS(BF%INDEX)
+      NC = 0
       I1=0; I2=-1; J1=0; J2=-1; K1=0; K2=-1; ! Just dummy numbers, not needed for INBOUND_FACES
       ! write geometry for slice file
       IF (ABS(STIME-T_BEGIN)<TWO_EPSILON_EB) THEN
@@ -8597,18 +8701,17 @@ FILE_LOOP: DO NF=1,N_BNDF
 
          OPEN(LU_BNDG(NF,NM),FILE=FN_BNDG(NF,NM),FORM='UNFORMATTED',STATUS='REPLACE')
          CALL DUMP_SLICE_GEOM_DATA(NM,LU_BNDG(NF,NM),.FALSE.,.FALSE.,"INBOUND_FACES",1,STIME,I1,I2,J1,J2,K1,K2, &
-                                   IND,BF%Y_INDEX,BF%Z_INDEX)
+                                   IND,BF%Y_INDEX,BF%Z_INDEX,BF%DEBUG)
          CLOSE(LU_BNDG(NF,NM))
       ELSE
          ! data file at subsequent time steps
          OPEN(LU_BNDG(NF,NM),FILE=FN_BNDG(NF,NM),FORM='UNFORMATTED',STATUS='OLD',POSITION='APPEND')
          CALL DUMP_SLICE_GEOM_DATA(NM,LU_BNDG(NF,NM),.FALSE.,.FALSE.,"INBOUND_FACES",0,STIME,I1,I2,J1,J2,K1,K2, &
-                                   IND,BF%Y_INDEX,BF%Z_INDEX)
+                                   IND,BF%Y_INDEX,BF%Z_INDEX,BF%DEBUG)
          CLOSE(LU_BNDG(NF,NM))
       ENDIF
-   ENDIF
-
-ENDDO FILE_LOOP
+   ENDDO FILE_LOOP2
+ENDIF
 
 FROM_BNDF = .FALSE.
 

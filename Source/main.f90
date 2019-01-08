@@ -26,7 +26,8 @@ USE WALL_ROUTINES
 USE FIRE
 USE CONTROL_FUNCTIONS
 USE EVAC
-USE TURBULENCE, ONLY: NS_ANALYTICAL_SOLUTION,INIT_TURB_ARRAYS,COMPRESSION_WAVE,TWOD_VORTEX_CERFACS,TWOD_VORTEX_UMD, &
+USE TURBULENCE, ONLY: NS_ANALYTICAL_SOLUTION,INIT_TURB_ARRAYS,COMPRESSION_WAVE,&
+                      TWOD_VORTEX_CERFACS,TWOD_VORTEX_UMD,TWOD_SOBOROT_UMD, &
                       SYNTHETIC_TURBULENCE,SYNTHETIC_EDDY_SETUP,SANDIA_DAT
 USE MANUFACTURED_SOLUTIONS, ONLY: SHUNN_MMS_3,SAAD_MMS_1
 USE COMPLEX_GEOMETRY, ONLY: INIT_CUTCELL_DATA, CCIBM_SET_DATA, CCIBM_END_STEP, FINISH_CCIBM, &
@@ -106,6 +107,10 @@ IF (MYID==0 .AND. VERBOSE) WRITE(LU_ERR,'(A)') ' Input file read'
 
 CALL STOP_CHECK(1)
 
+! If SOLID_HT3D=T in any mesh, then set SOLID_HT3D=T in all meshes.
+
+CALL MPI_ALLREDUCE(MPI_IN_PLACE,SOLID_HT3D,INTEGER_ONE,MPI_LOGICAL,MPI_LOR,MPI_COMM_WORLD,IERR)
+
 ! Setup number of OPENMP threads
 
 CALL OPENMP_SET_THREADS
@@ -131,10 +136,11 @@ CALL MPI_BARRIER(MPI_COMM_WORLD, IERR)
 
 ! Shut down the run if it is only for checking the set up
 
-IF (SETUP_ONLY .AND. .NOT.CHECK_MESH_ALIGNMENT) THEN
-   STOP_STATUS = SETUP_ONLY_STOP
-   CALL STOP_CHECK(1)
-ENDIF
+IF (SETUP_ONLY .AND. .NOT.CHECK_MESH_ALIGNMENT) STOP_STATUS = SETUP_ONLY_STOP
+
+! Check for errors and shutdown if found
+
+CALL STOP_CHECK(1)
 
 ! MPI process 0 reopens the Smokeview file for additional output
 
@@ -269,6 +275,8 @@ DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
    IF (PERIODIC_TEST==9) CALL SANDIA_DAT(NM,UVW_FILE)
    IF (PERIODIC_TEST==10) CALL TWOD_VORTEX_UMD(NM)
    IF (PERIODIC_TEST==11) CALL SAAD_MMS_1(NM)
+   IF (PERIODIC_TEST==12) CALL TWOD_SOBOROT_UMD(NM)
+   IF (PERIODIC_TEST==13) CALL TWOD_SOBOROT_UMD(NM)
    IF (PERIODIC_TEST==21) CALL ROTATED_CUBE_ANN_SOLN(NM,T_BEGIN) ! No Rotation.
    IF (PERIODIC_TEST==22) CALL ROTATED_CUBE_ANN_SOLN(NM,T_BEGIN) ! 28 deg Rotation.
    IF (UVW_RESTART)      CALL UVW_INIT(NM,CSVFINFO(NM)%UVWFILE)
@@ -337,10 +345,12 @@ ENDDO
 
 ! Potentially read data from a previous calculation
 
-DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
-   IF (RESTART) CALL READ_RESTART(T,DT,NM)
-ENDDO
-CALL MPI_BARRIER(MPI_COMM_WORLD, IERR)
+IF (RESTART) THEN
+   DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
+      CALL READ_RESTART(T,DT,NM)
+   ENDDO
+   CALL STOP_CHECK(1)
+ENDIF
 
 ! Initialize particle distributions
 
@@ -720,6 +730,7 @@ MAIN_LOOP: DO
 
    COMPUTE_WALL_BC_2A: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
       IF (EVACUATION_SKIP(NM)) CYCLE COMPUTE_WALL_BC_2A
+      IF (N_REACTIONS > 0) CALL COMBUSTION_BC(NM)
       CALL UPDATE_PARTICLES(T,DT,NM)
       CALL WALL_BC(T,DT,NM)
       CALL PARTICLE_MOMENTUM_TRANSFER(NM)
@@ -1418,7 +1429,6 @@ SUBROUTINE END_FDS
 ! End the calculation gracefully, even if there is an error
 
 CHARACTER(255) :: MESSAGE
-LOGICAL :: OPN
 
 IF (STOP_STATUS==NO_STOP .OR. STOP_STATUS==USER_STOP) CALL DUMP_TIMERS
 
@@ -1452,11 +1462,14 @@ IF (MYID==0) THEN
          WRITE(MESSAGE,'(A)') 'STOP: Level set analysis only'
       CASE(REALIZABILITY_STOP)
          WRITE(MESSAGE,'(A)') 'STOP: Unrealizable mass density'
+      CASE DEFAULT
+         WRITE(MESSAGE,'(A)') 'null'
    END SELECT
 
-   WRITE(LU_ERR,'(/A,A,A,A)') TRIM(MESSAGE),' (CHID: ',TRIM(CHID),')'
-   INQUIRE(LU_OUTPUT,OPENED=OPN)
-   IF (OPN) WRITE(LU_OUTPUT,'(/A,A,A,A)') TRIM(MESSAGE),' (CHID: ',TRIM(CHID),')'
+   IF (MESSAGE/='null') THEN
+      WRITE(LU_ERR,'(/A,A,A,A)') TRIM(MESSAGE),' (CHID: ',TRIM(CHID),')'
+      IF (OUT_FILE_OPENED) WRITE(LU_OUTPUT,'(/A,A,A,A)') TRIM(MESSAGE),' (CHID: ',TRIM(CHID),')'
+   ENDIF
 
 ENDIF
 
@@ -1745,6 +1758,8 @@ OTHER_MESH_LOOP: DO NOM=1,NMESHES
    OM%FVZ = 0._EB
    ALLOCATE(OM%KRES(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX))
    OM%KRES = 0._EB
+   ALLOCATE(OM%Q(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX))
+   OM%Q = 0._EB
 
    ALLOCATE(OM%  ZZ(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX,N_TOTAL_SCALARS))
    ALLOCATE(OM% ZZS(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX,N_TOTAL_SCALARS))
@@ -1955,7 +1970,7 @@ MESH_LOOP: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
 
             ! Allocate the 1-D arrays that hold the big mesh variables that are to be received
 
-            ALLOCATE(M3%REAL_RECV_PKG1(M3%NIC_R*(5+2*N_TOTAL_SCALARS)))
+            ALLOCATE(M3%REAL_RECV_PKG1(M3%NIC_R*(6+2*N_TOTAL_SCALARS)))
             ALLOCATE(M3%REAL_RECV_PKG3(IJK_SIZE*4))
             ALLOCATE(M3%REAL_RECV_PKG5(NRA_MAX*NUMBER_SPECTRAL_BANDS*M3%NIC_R))
             ALLOCATE(M3%REAL_RECV_PKG7(M3%NIC_R*3))
@@ -2170,7 +2185,7 @@ SENDING_MESH_LOOP: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
 
             ! Allocate 1-D arrays to hold major mesh variables that are to be sent to neighboring meshes
 
-            ALLOCATE(M3%REAL_SEND_PKG1(M3%NIC_S*(5+2*N_TOTAL_SCALARS)))
+            ALLOCATE(M3%REAL_SEND_PKG1(M3%NIC_S*(6+2*N_TOTAL_SCALARS)))
             ALLOCATE(M3%REAL_SEND_PKG3(IJK_SIZE*4))
             ALLOCATE(M3%REAL_SEND_PKG5(NRA_MAX*NUMBER_SPECTRAL_BANDS*M3%NIC_S))
             ALLOCATE(M3%REAL_SEND_PKG7(M3%NIC_S*3))
@@ -2261,7 +2276,7 @@ SENDING_MESH_LOOP: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
             RHOP => M%RHO  ; DP => M%DS ; ZZP => M%ZZ
          ENDIF
          IF (RNODE/=SNODE) THEN
-            NQT2 = 5+2*N_TOTAL_SCALARS
+            NQT2 = 6+2*N_TOTAL_SCALARS
             PACK_REAL_SEND_PKG1: DO LL=1,M3%NIC_S
                II1 = M3%IIO_S(LL) ; II2 = II1
                JJ1 = M3%JJO_S(LL) ; JJ2 = JJ1
@@ -2279,9 +2294,10 @@ SENDING_MESH_LOOP: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
                M3%REAL_SEND_PKG1(NQT2*(LL-1)+3) =   M%MU(II1,JJ1,KK1)
                M3%REAL_SEND_PKG1(NQT2*(LL-1)+4) = M%KRES(II1,JJ1,KK1)
                M3%REAL_SEND_PKG1(NQT2*(LL-1)+5) =     DP(II1,JJ1,KK1)
+               M3%REAL_SEND_PKG1(NQT2*(LL-1)+6) =    M%Q(II1,JJ1,KK1)
                DO NN=1,N_TOTAL_SCALARS
-                  M3%REAL_SEND_PKG1(NQT2*(LL-1)+5+2*NN-1) = ZZP(II1,JJ1,KK1,NN)
-                  M3%REAL_SEND_PKG1(NQT2*(LL-1)+5+2*NN  ) = ZZP(II2,JJ2,KK2,NN)
+                  M3%REAL_SEND_PKG1(NQT2*(LL-1)+6+2*NN-1) = ZZP(II1,JJ1,KK1,NN)
+                  M3%REAL_SEND_PKG1(NQT2*(LL-1)+6+2*NN  ) = ZZP(II2,JJ2,KK2,NN)
                ENDDO
             ENDDO PACK_REAL_SEND_PKG1
          ELSE
@@ -2294,6 +2310,7 @@ SENDING_MESH_LOOP: DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
             RHOP2(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)   = RHOP(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)
             M2%MU(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)   = M%MU(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)
             M2%KRES(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX) = M%KRES(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)
+            M2%Q(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)    = M%Q(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)
             DP2(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)     = DP(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX)
             ZZP2(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX,1:N_TOTAL_SCALARS)= ZZP(IMIN:IMAX,JMIN:JMAX,KMIN:KMAX,1:N_TOTAL_SCALARS)
          ENDIF
@@ -2609,7 +2626,7 @@ SNODE = PROCESS(NOM)
       ! Unpack densities and species mass fractions in the PREDICTOR (CODE=1) and CORRECTOR (CODE=4) step
 
       IF ((CODE==1.OR.CODE==4) .AND. M2%NIC_R>0 .AND. RNODE/=SNODE) THEN
-            NQT2 = 5+2*N_TOTAL_SCALARS
+            NQT2 = 6+2*N_TOTAL_SCALARS
             IF (CODE==1) THEN
                RHOP => M2%RHOS ; DP => M2%D  ; ZZP => M2%ZZS
             ELSE
@@ -2632,9 +2649,10 @@ SNODE = PROCESS(NOM)
                  M2%MU(II1,JJ1,KK1) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+3)
                M2%KRES(II1,JJ1,KK1) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+4)
                     DP(II1,JJ1,KK1) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+5)
+                  M2%Q(II1,JJ1,KK1) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+6)
                DO NN=1,N_TOTAL_SCALARS
-                     ZZP(II1,JJ1,KK1,NN) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+5+2*NN-1)
-                     ZZP(II2,JJ2,KK2,NN) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+5+2*NN  )
+                     ZZP(II1,JJ1,KK1,NN) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+6+2*NN-1)
+                     ZZP(II2,JJ2,KK2,NN) = M2%REAL_RECV_PKG1(NQT2*(LL-1)+6+2*NN  )
                ENDDO
             ENDDO UNPACK_REAL_RECV_PKG1
       ENDIF
@@ -2859,7 +2877,7 @@ SUBROUTINE WRITE_STRINGS
 ! Write character strings out to the .smv file
 
 INTEGER :: N,NOM,N_STRINGS_DUM
-CHARACTER(80), ALLOCATABLE, DIMENSION(:) :: STRING_DUM
+CHARACTER(MESH_STRING_LENGTH), ALLOCATABLE, DIMENSION(:) :: STRING_DUM
 REAL(EB) :: TNOW
 
 TNOW = CURRENT_TIME()
@@ -2869,7 +2887,7 @@ TNOW = CURRENT_TIME()
 DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
    IF (MYID>0) THEN
       CALL MPI_SEND(MESHES(NM)%N_STRINGS,1,MPI_INTEGER,0,1,MPI_COMM_WORLD,IERR)
-      IF (MESHES(NM)%N_STRINGS>0) CALL MPI_SEND(MESHES(NM)%STRING(1),MESHES(NM)%N_STRINGS*80,MPI_CHARACTER,0,NM, &
+      IF (MESHES(NM)%N_STRINGS>0) CALL MPI_SEND(MESHES(NM)%STRING(1),MESHES(NM)%N_STRINGS*MESH_STRING_LENGTH,MPI_CHARACTER,0,NM, &
                                                 MPI_COMM_WORLD,IERR)
    ENDIF
 ENDDO
@@ -2885,7 +2903,8 @@ IF (MYID==0) THEN
          CALL MPI_RECV(N_STRINGS_DUM,1,MPI_INTEGER,PROCESS(NOM),1,MPI_COMM_WORLD,STATUS,IERR)
          IF (N_STRINGS_DUM>0) THEN
             ALLOCATE(STRING_DUM(N_STRINGS_DUM))
-            CALL MPI_RECV(STRING_DUM(1),N_STRINGS_DUM*80,MPI_CHARACTER,PROCESS(NOM),NOM,MPI_COMM_WORLD,STATUS,IERR)
+            CALL MPI_RECV(STRING_DUM(1),N_STRINGS_DUM*MESH_STRING_LENGTH, &
+            MPI_CHARACTER,PROCESS(NOM),NOM,MPI_COMM_WORLD,STATUS,IERR)
          ENDIF
       ELSE
          N_STRINGS_DUM = MESHES(NOM)%N_STRINGS
@@ -3095,19 +3114,19 @@ EXCHANGE_DEVICE: IF (N_DEVC>0) THEN
       ENDIF
    ENDDO
 
-   ! Each DEViCe has 0 or more SUBDEVICEs. These SUBDEVICEs contain the values of the DEViCe on the meshes controlled 
-   ! by the copy of the DEViCe controlled by this MPI process. Each MPI process has a copy of every DEViCe, but only 
+   ! Each DEViCe has 0 or more SUBDEVICEs. These SUBDEVICEs contain the values of the DEViCe on the meshes controlled
+   ! by the copy of the DEViCe controlled by this MPI process. Each MPI process has a copy of every DEViCe, but only
    ! the MPI process that controls the meshes has a copy of the DEViCe for which SUBDEVICEs have been allocated.
 
-   ! In the following loop, for OP_INDEX=1, we add together VALUE_1 and possibly VALUE_2 for all SUBDEVICEs (i.e. meshes) 
-   ! allocated by the copy of the DEViCe associated with the current MPI process, MYID. Then we do an MPI_ALLREDUCE that 
-   ! adds the VALUE_1 and VALUE_2 from other SUBDEVICEs allocated by the copies of the DEViCE stored by the other MPI processes. 
+   ! In the following loop, for OP_INDEX=1, we add together VALUE_1 and possibly VALUE_2 for all SUBDEVICEs (i.e. meshes)
+   ! allocated by the copy of the DEViCe associated with the current MPI process, MYID. Then we do an MPI_ALLREDUCE that
+   ! adds the VALUE_1 and VALUE_2 from other SUBDEVICEs allocated by the copies of the DEViCE stored by the other MPI processes.
    ! For OP_INDEX=2 and 3, we take the MIN or MAX insteading of adding VALUE_1 togheter.
 
    OPERATION_LOOP: DO OP_INDEX=1,3
       IF (OP_INDEX==2 .AND. .NOT.MIN_DEVICES_EXIST) CYCLE OPERATION_LOOP
       IF (OP_INDEX==3 .AND. .NOT.MAX_DEVICES_EXIST) CYCLE OPERATION_LOOP
-      SELECT CASE(OP_INDEX) 
+      SELECT CASE(OP_INDEX)
          CASE(1) ; TC_LOC =  0._EB    ; MPI_OP_INDEX = MPI_SUM ; DIM_FAC = 3
          CASE(2) ; TC_LOC =  1.E10_EB ; MPI_OP_INDEX = MPI_MIN ; DIM_FAC = 1
          CASE(3) ; TC_LOC = -1.E10_EB ; MPI_OP_INDEX = MPI_MAX ; DIM_FAC = 1
@@ -3205,7 +3224,7 @@ ENDDO DEVICE_LOOP
 
 ! If a door,entr,exit changes state, save the Smokeview file strings and time of state change
 
-EVAC_ONLY: IF (ANY(EVACUATION_ONLY)) THEN
+EVAC_ONLY: IF (ANY(EVACUATION_ONLY) .AND. MYID==EVAC_PROCESS) THEN
    I=0  ! Counter for evacuation devices, doors+exits+entrys (evss do not change states)
    DO N=1,N_DOORS
       NM = EVAC_DOORS(N)%IMESH

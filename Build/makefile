@@ -94,8 +94,8 @@ endif
 endif # OS test
 endif # MKLROOT test
 
-obj_mpi = prec.o cons.o devc.o data.o type.o mesh.o func.o smvv.o irad.o turb.o soot.o\
-          ieva.o pois.o scrc.o evac.o gsmv.o geom.o radi.o part.o vege.o ctrl.o samr.o dump.o hvac.o mass.o \
+obj_mpi = prec.o cons.o devc.o data.o type.o mesh.o func.o gsmv.o  smvv.o irad.o turb.o soot.o\
+          ieva.o pois.o scrc.o evac.o geom.o radi.o part.o vege.o ctrl.o samr.o dump.o hvac.o mass.o \
           read.o wall.o fire.o divg.o velo.o pres.o init.o main.o
 
 objwin_mpi = $(obj_mpi:.o=.obj)
@@ -379,7 +379,7 @@ data.o : prec.o func.o cons.o
 func.o : prec.o cons.o type.o mesh.o devc.o
 turb.o : func.o prec.o cons.o mesh.o
 soot.o : prec.o mesh.o cons.o func.o turb.o
-smvv.o : prec.o func.o
+smvv.o : geom.o prec.o func.o
 ctrl.o : prec.o cons.o type.o mesh.o func.o
 samr.o : prec.o cons.o mesh.o turb.o
 gsmv.o : func.o prec.o cons.o mesh.o
@@ -387,7 +387,7 @@ geom.o : gsmv.o func.o prec.o cons.o mesh.o turb.o
 scrc.o : prec.o cons.o mesh.o func.o pois.o geom.o
 irad.o : func.o prec.o cons.o type.o mesh.o
 ieva.o : func.o prec.o cons.o type.o mesh.o
-fire.o : func.o prec.o cons.o type.o mesh.o mass.o
+fire.o : func.o prec.o cons.o type.o mesh.o mass.o soot.o
 hvac.o : func.o prec.o cons.o type.o mesh.o ctrl.o
 wall.o : func.o prec.o cons.o type.o mesh.o hvac.o mass.o soot.o geom.o
 velo.o : func.o prec.o cons.o type.o mesh.o turb.o geom.o scrc.o
@@ -412,7 +412,7 @@ data.obj : prec.obj func.obj cons.obj
 func.obj : prec.obj cons.obj type.obj mesh.obj devc.obj
 turb.obj : func.obj prec.obj cons.obj mesh.obj
 soot.obj : prec.obj mesh.obj cons.obj func.obj turb.obj
-smvv.obj : prec.obj func.obj
+smvv.obj : prec.obj func.obj geom.obj
 ctrl.obj : prec.obj cons.obj type.obj mesh.obj func.obj
 samr.obj : prec.obj cons.obj mesh.obj turb.obj
 gsmv.obj : func.obj prec.obj cons.obj mesh.obj
@@ -420,7 +420,7 @@ geom.obj : gsmv.obj func.obj prec.obj cons.obj mesh.obj turb.obj
 scrc.obj : prec.obj cons.obj mesh.obj func.obj pois.obj geom.obj
 irad.obj : func.obj prec.obj cons.obj type.obj mesh.obj
 ieva.obj : func.obj prec.obj cons.obj type.obj mesh.obj
-fire.obj : func.obj prec.obj cons.obj type.obj mesh.obj mass.obj
+fire.obj : func.obj prec.obj cons.obj type.obj mesh.obj mass.obj soot.obj
 hvac.obj : func.obj prec.obj cons.obj type.obj mesh.obj ctrl.obj
 wall.obj : func.obj prec.obj cons.obj type.obj mesh.obj hvac.obj mass.obj soot.obj geom.obj
 velo.obj : func.obj prec.obj cons.obj type.obj mesh.obj turb.obj geom.obj scrc.obj
