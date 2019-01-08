@@ -25,14 +25,14 @@ $QFDS -p 8 -d Atmospheric_Effects wind_example.fds
 $QFDS -d Complex_Geometry geom_bad_intersection.fds
 $QFDS -d Complex_Geometry geom_bad_inverted_normals.fds
 $QFDS -d Complex_Geometry geom_simple.fds
-$QFDS -d Complex_Geometry geom_azim.fds
-$QFDS -d Complex_Geometry geom_elev.fds
-$QFDS -d Complex_Geometry geom_scale.fds
+#$QFDS -d Complex_Geometry geom_azim.fds
+#$QFDS -d Complex_Geometry geom_elev.fds
+#$QFDS -d Complex_Geometry geom_scale.fds
 $QFDS -d Complex_Geometry geom_obst.fds
 $QFDS -d Complex_Geometry geom_sphere1a.fds
 $QFDS -d Complex_Geometry geom_sphere1c.fds
 $QFDS -d Complex_Geometry geom_sphere1e.fds
-$QFDS -d Complex_Geometry geom_sphere2.fds
+#$QFDS -d Complex_Geometry geom_sphere2.fds
 $QFDS -d Complex_Geometry geom_sphere3b.fds
 $QFDS -d Complex_Geometry geom_sphere3d.fds
 $QFDS -d Complex_Geometry geom_sphere3f.fds
@@ -606,6 +606,31 @@ $QFDS -p 4 -d Scalar_Analytical_Solution shunn3_4mesh_64.fds
 $QFDS -p 4 -d Scalar_Analytical_Solution shunn3_4mesh_128.fds
 $QFDS -p 4 -d Scalar_Analytical_Solution shunn3_4mesh_256.fds
 $QFDS -p 4 -d Scalar_Analytical_Solution shunn3_4mesh_512.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_godunov_square_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_godunov_square_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_godunov_square_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_godunov_square_wave_128.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_square_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_square_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_square_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_superbee_square_wave_128.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_square_wave_128_1mesh.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_square_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_square_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_square_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_charm_square_wave_128.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_cos_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_cos_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_charm_cos_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_charm_cos_wave_128.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_cos_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_cos_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_superbee_cos_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_superbee_cos_wave_128.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_mp5_cos_wave_16.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_mp5_cos_wave_32.fds
+$QFDS      -d Scalar_Analytical_Solution soborot_mp5_cos_wave_64.fds
+$QFDS -p 4 -d Scalar_Analytical_Solution soborot_mp5_cos_wave_128.fds
 
 $QFDS -o 1 -d Thread_Check race_test_1.fds
 $QFDS -o 4 -d Thread_Check race_test_4.fds
