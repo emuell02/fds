@@ -2699,7 +2699,7 @@ PYROLYSIS_PREDICTED_IF: IF (SF%PYROLYSIS_MODEL==PYROLYSIS_PREDICTED) THEN
          ML  => MATERIAL(SF%MATL_INDEX(N))   
          SELECT CASE (ML%ID)
             CASE ('DRY VEGETATION')
-               MVG=SUM(SF%RHO_0(:,N))
+               MVG=SF%RHO_0(1,N)
                RSVG=SUM(ML%NU_RESIDUE(:,:))
             CASE ('CHAR')
                RSCHR=SUM(ML%NU_RESIDUE(:,:))
@@ -2969,9 +2969,6 @@ THERM_THIN: IF (PRESENT(PARTICLE_INDEX) .AND. NWP==1 .AND. TGA_PARTICLE_INDEX<0)
    DTMP_VEG    = DT_BC*(AERVE*(ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F)+ &
       ONE_D%EMISSIVITY*(0.25_EB*UII(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)-SIGMA*ONE_D%TMP_F**4))+Q_S(1))/RHOCBAR(1)
       !QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA)
-   IF ((ONE_D%TMP_F+DTMP_VEG)<0._EB) THEN
-      PRINT*,TGA_PARTICLE_INDEX,DTMP_VEG,Q_S(1),AERVE*ONE_D%HEAT_TRANS_COEF*(ONE_D%TMP_G-ONE_D%TMP_F),AERVE*QR_W(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG)/SIGMA_BETA
-   ENDIF
    ONE_D%TMP_F = ONE_D%TMP_F + DTMP_VEG
    ONE_D%TMP(0:NWP+1) = ONE_D%TMP(0:NWP+1) + DTMP_VEG
 ELSE
@@ -3105,7 +3102,7 @@ INTEGER :: N,NN,J,NS,SMIX_INDEX
 TYPE(MATERIAL_TYPE), POINTER :: ML
 TYPE(SURFACE_TYPE), POINTER :: SF
 REAL(EB) :: DTMP,REACTION_RATE,Y_O2,X_O2,Q_DOT_S_PPP,MW_G,X_G,X_W,D_AIR,H_MASS,RE_L,SHERWOOD,MFLUX,MU_AIR,SC_AIR,U_TANG,&
-            SIGMA_BETA,RHO_DOT,RDN,AERVE,VPRVC,CP,NUO2,NUCO,NUCO2,NUCHAR,CORCO2,Q_SML
+            SIGMA_BETA_E,RHO_DOT,RDN,AERVE,VPRVC,CP,NUO2,NUCO,NUCO2,NUCHAR,CORCO2,Q_SML
 REAL(EB),ALLOCATABLE :: NUADJ(:)
 
 !rm ->
@@ -3221,7 +3218,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                ENDIF
             ENDIF
             
-            SIGMA_BETA = LP%PWT*LP%ONE_D%AREA*RDX(IIG)*RRN(IIG)*RDY(JJG)*RDZ(KKG)
+            SIGMA_BETA_E = SF%LENGTH*PI*SF%THICKNESS*2._EB*RDX(IIG)*RRN(IIG)*RDY(JJG)*RDZ(KKG)
             VPRVC=LP%PWT*SF%LENGTH*PI*(SF%THICKNESS**2._EB)*RDX(IIG)*RRN(IIG)*RDY(JJG)*RDZ(KKG)
             AERVE=1/GFAC
             ! Reaction rate in 1/s
@@ -3270,10 +3267,10 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                ! currently operates under the assumption of single layer cylindrical particle
                IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX+1)) THEN
                   REACTION_RATE = REACTION_RATE * &
-                               RHO_S(N)*VPRVC*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
+                               RHO_S(N)*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
                ELSE
                   REACTION_RATE = REACTION_RATE * &
-                               RHO(IIG,JJG,KKG)*Y_O2*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
+                               RHO(IIG,JJG,KKG)*Y_O2*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
                ENDIF
                
                RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
@@ -3283,7 +3280,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                Q_SML = RHO_DOT * NUADJ(CO2_INDEX+1)*0.5*-394.5_EB/44._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - Q_SML
                CALL GET_SPECIFIC_HEAT(ZZ_GET,CP,TMP(IIG,JJG,KKG))
-               D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*-Q_SML)/ &
+               D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*Q_SML)/ &
                   (CP*TMP(IIG,JJG,KKG)*RHO(IIG,JJG,KKG))
 
                ! energy exchanges related to CO
@@ -3291,7 +3288,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                Q_SML = RHO_DOT * NUADJ(CO_INDEX+1)*0.5*-110.5_EB/28._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - Q_SML
                CALL GET_SPECIFIC_HEAT(ZZ_GET,CP,TMP(IIG,JJG,KKG))
-               D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*-Q_SML)/ &
+               D_SOURCE(IIG,JJG,KKG) = D_SOURCE(IIG,JJG,KKG) - (VPRVC*Q_SML)/ &
                   (CP*TMP(IIG,JJG,KKG)*RHO(IIG,JJG,KKG))
 
                ! bulk heat of reaction
