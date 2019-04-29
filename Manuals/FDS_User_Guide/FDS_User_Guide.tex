@@ -466,7 +466,7 @@ Sample input files are included as part of the standard installation. A good cas
 
 \subsection{A Brief Primer on Computer Hardware}
 
-FDS simulations can exploit multiple processing units on a single computer or multiple computers on a network. Before running an FDS simulation, you should familiarize yourself with your computer hardware. 
+FDS simulations can exploit multiple processing units on a single computer or multiple computers on a network. Before running an FDS simulation, you should familiarize yourself with your computer hardware.
 
 If you are using a computer running Microsoft Windows, open up the Task Manager, Performance tab, and look for the number of {\em sockets}, {\em cores}, and {\em logical processors}\footnote{The terms sockets, cores, and logical processors are used by the Windows~10 Task Manager on a computer using an Intel processor. These terms might vary with different versions of Windows and different processors.}. The socket refers to the physical connector on the motherboard that has a power supply and a connection to random access memory (RAM). This is usually referred to as the central processing unit or CPU. Some motherboards have multiple sockets that can in turn support multiple CPUs, but for typical Windows desktops or laptops, there is one socket/CPU. Each CPU, however, typically has multiple cores, and each core is essentially an independent processing unit that shares access to power and memory. Sometimes cores are referred to as {\em physical cores} to distinguish them from {\em logical cores} or {\em logical processors}. A logical processor is one of multiple {\em threads} that can be supported by a core. For the purpose of running FDS on a Windows computer, the number of logical processors is your most important consideration.
 
@@ -516,17 +516,17 @@ To start an FDS simulation, you can either use a third-party graphical user inte
 
 The files needed to run an FDS simulation on a single Windows computer or across a Windows domain network are bundled in with the FDS download. There is no need to install MPI or any redistributable libraries. The following procedure is intended for a Windows domain network; that is, a network where user accounts are centrally managed such that any user can log in to any machine using the same credentials. If you are not on a domain network, you can still run FDS locally, and instructions are given below.
 
-First, it is a good idea to uninstall older versions of FDS from all computers you plan to use. Even though the new version will overwrite older versions, there is always a chance that some remnant of an older version might cause incompatibilities with the new.
+Open up the special FDS command prompt, CMDfds, which should appear on your desktop when you install FDS. By opening this special command prompt, a script is run automatically ensuring that the FDS commands and libraries are all consistent. Change directories (``cd'') to where the input file for the case is located. Decide how many logical processes you want to devote to the simulation. Next, decide if you want to run the job solely on your own computer or on multiple computers on the network.
 
-Open up a Command Prompt window (click Start, then Run, then type ``cmd''), and change directories (``cd'') to where the input file for the case is located. Decide how many logical processes you want to devote to the simulation. For example, if you have 8 logical processes available, and you have an FDS job that involves 4 meshes, you would type the following at the command prompt:
+If you decide you want to run the case solely on your own computer, and suppose you have 8 logical processors (cores) available, and you have an FDS job that uses 4 meshes, type the following at the command prompt:
 \begin{lstlisting}
-mpiexec -n 4 -env OMP_NUM_THREADS 2 fds job_name.fds
+fds_local -p 4 -o 2 job_name.fds
 \end{lstlisting}
-If you are not on a Windows domain network, add the argument {\ct -localonly} to the command line, which means that you do not intend to run the job across multiple computers and that you do not need to provide network credentials.
+This job will exploit all $4 \times 2 = 8$ logical processors, which you can confirm by opening the Task Manager. The {\ct -p} parameter indicates the number of MPI processes, and the {\ct -o} indicates the number of OpenMP threads.
 
 The progress of the simulation is indicated by diagnostic output that is written onto the screen. Detailed diagnostic information is automatically written to a file {\ct job\_name.out}. Screen output can be redirected to a file via the alternative command:
 \begin{lstlisting}
-mpiexec ... fds job_name.fds > job_name.err
+fds_local ... job_name.fds > job_name.err
 \end{lstlisting}
 Note that it is also possible to associate the {\ct .fds} extension with the FDS executable directly, thereby making FDS run by double-clicking on the input file. However, we do not recommend this because of complications associated with the {\ct mpiexec} program.
 
@@ -552,11 +552,14 @@ If you wish to run FDS on more than one computer, do the following:
 
    where {\ct fred} and {\ct ethel} are the names of two computers on your network. Remember to add the argument {\ct -env OMP\_NUM\_THREADS N} to set the number of OpenMP threads per MPI process on all computers. The default is {\em not} 1, but rather depends on the number of logical processors your computer has. If you accidently set too many OpenMP threads, you can overload your logical processors and reduce the job efficiency.
 
-\item If successful, you should see the usual FDS printout indicating the processes being assigned to the computers. If unsuccessful, try running the case on your own machine:
+\item If successful, you should see the usual FDS printout indicating the processes being assigned to the computers. If unsuccessful, try running the case on your own computer:
 
    {\ct mpiexec -hosts 1 fred 2 -wdir \textbackslash\textbackslash...\textbackslash... fds job\_name.fds}
 
    If this is not successful, check with your network administrator or monitor the FDS help forums for advice.
+\item If you plan to use more than just a few computers to run the job, create a text file, say, {\ct hostfile.txt}, and list, line by line, the name of each computer, followed by the number of MPI processes per computer.
+
+   {\ct mpiexec -hostfile hostfile.txt -env ... -wdir ... fds job\_name.fds}
 \end{enumerate}
 
 
@@ -590,7 +593,7 @@ comp2 slots=1
 comp3 slots=2
 \end{lstlisting}
 where {\ct compX} are the names of available nodes and {\ct slots} indicate the number of available cores on each node. The parameter {\ct slots} is optional. On a cluster shared by others, you should not run long jobs without a job scheduler because it is possible for multiple jobs to share the same nodes/cores when a scheduler is not used.
-If you are using a single Linux or Mac OS X workstation, there is no need to define a host file. You just need to invoke the previously described {\ct mpiexec} line with a number of processors suitable to your case and computer. 
+If you are using a single Linux or Mac OS X workstation, there is no need to define a host file. You just need to invoke the previously described {\ct mpiexec} line with a number of processors suitable to your case and computer.
 
 
 
@@ -1002,7 +1005,7 @@ If something sudden is to happen right at the start of a simulation, like a spri
 
 At the end of the first part of the explicit predictor-corrector time update, the time step is checked to ensure that it is within the appropriate stability bounds. If it is not, it is adjusted up or down by 10~\% (or until it is within limits) and the predictor part of the time step is re-run. If you want to prevent FDS from automatically changing the time step, set {\ct LOCK\_TIME\_STEP} equal to {\ct .TRUE.} on the {\ct TIME} line, in which case the specified time step, {\ct DT}, will not be adjusted. This parameter is intended for diagnostic purposes only, for example, timing program execution. It can lead to numerical instabilities if the initial time step is set too high.
 
-The diagnostic output file called {\ct CHID.out} contains information about the time step and CFL number in each mesh. However, for simulations that involve dozens or hundreds of meshes, it can be difficult to assess the global time step information. For detailed information about the time step, there is an optional output file called {\ct CHID\_cfl.csv} that contains the time, time step, maximum CFL number, maximum VN (Von Neumann) number, the mesh and mesh indices where these maximum values occur, and the six velocity components on the six faces of the grid cell where the maximum CFL number occurs. To output this file, set {\ct CFL\_FILE} to {\ct .TRUE.} on the {\ct DUMP} line. It is normally set to {\ct .FALSE.}
+The diagnostic output file called {\ct CHID.out} contains information about the time step and CFL number in each mesh. However, for simulations that involve dozens or hundreds of meshes, it can be difficult to assess the global time step information. For detailed information about the time step, there is an optional output file called {\ct CHID\_cfl.csv} that contains, for every time step, the time~(s), time step size~(s), maximum CFL number, the mesh and mesh indices where the maximum CFL value occurs, the six velocity components on the six faces of the grid cell where the maximum CFL number occurs, and the divergence~(1/s), viscosity~(kg/m/s), and HRRPUV~(kW/m$^3$) where the maximum CFL occurs. Also listed is the maximum VN (Von Neumann) number and the mesh and cell indices were it occurs. To output this file, set {\ct CFL\_FILE} to {\ct .TRUE.} on the {\ct DUMP} line. It is normally set to {\ct .FALSE.}
 
 
 \subsection{Special Topic: Steady-State Applications}
@@ -1192,18 +1195,24 @@ and you want to alter the uniform spacing in the $x$ direction. First, refer to 
 
 Two types of transformation functions are allowed. The first, and simplest, is a piecewise-linear function. Figure~\ref{fig:grid2} gives an example of a piecewise-linear transformation. The graph indicates how 15 uniformly spaced mesh cells along the horizontal axis are transformed into 15 non-uniformly spaced cells along the vertical axis. In this case, the function is made up of straight line segments connecting points ({\ct CC},{\ct PC}), in increasing order, as specified by the following lines in the input file:
 \begin{lstlisting}
-&TRNX CC=0.30, PC=0.50, MESH_NUMBER=2 /
-&TRNX CC=1.20, PC=1.00, MESH_NUMBER=2 /
+&MESH ..., TRNX_ID='my trnx' /
+&TRNX ID='my trnx', CC=0.30, PC=0.50 /
+&TRNX ID='my trnx', CC=1.20, PC=1.00 /
 \end{lstlisting}
-The integer {\ct MESH\_NUMBER} indicates which mesh to apply the transformation. If you want the transformation to be applied to all meshes, set {\ct MESH\_NUMBER} to 0. The parameter {\ct CC} refers to the Computational Coordinate, $\xi$, located on the horizontal axis; {\ct PC} is the Physical Coordinate, $x$, located on the vertical axis.  The slopes of the line segments in the plot indicate whether the mesh is being stretched (slopes greater than 1) or shrunk (slopes less than 1). The tricky part about this process is that you usually have a desired shrinking/stretching strategy for the Physical Coordinate on the vertical axis, and must work backwards to determine what the corresponding points should be for the Computational Coordinate on the horizontal axis. Note that the above transformation is applied to the second mesh in a multiple mesh job.
-It should be also noted that the start and endpoints should not be specified in this linear grid transformation.
+Note that an {\ct ID} may be applied to a set of {\ct TRNX} lines and invoked using a {\ct TRNX\_ID}, etc., on the desired {\ct MESH} lines.  This strategy also works when a {\ct MULT\_ID} is applied to the {\ct MESH}.  Alternatively, you may indicate the integer {\ct MESH\_NUMBER} (based on the order of the {\ct MESH} lines) for which you wish to apply the transformation (this approach is deprecated because it requires a set of transformation lines for each mesh, which can be impractical for MPI calculations).  If you want the transformation to be applied to all meshes, set {\ct MESH\_NUMBER} to 0.  Thus, an equivalent representation of the previous example applied to all meshes would be:
+\begin{lstlisting}
+&TRNX CC=0.30, PC=0.50, MESH_NUMBER=0 /
+&TRNX CC=1.20, PC=1.00, MESH_NUMBER=0 /
+\end{lstlisting}
+The parameter {\ct CC} refers to the Computational Coordinate, $\xi$, located on the horizontal axis; {\ct PC} is the Physical Coordinate, $x$, located on the vertical axis.  The slopes of the line segments in the plot indicate whether the mesh is being stretched (slopes greater than 1) or shrunk (slopes less than 1). The tricky part about this process is that you usually have a desired shrinking/stretching strategy for the Physical Coordinate on the vertical axis, and must work backwards to determine what the corresponding points should be for the Computational Coordinate on the horizontal axis. Note that the above transformation is applied to the second mesh in a multiple mesh job. It should be also noted that the start and endpoints should not be specified in this linear grid transformation.
 
 The second type of transformation is a polynomial function whose constraints are of the form
 \[ \frac{\d^n f(\hbox{\ct CC})}{\d\xi^n} = \hbox{\ct PC}   \]
-Figure~\ref{fig:grid1} gives an example of a polynomial transformation, for which the parameters are specified (assuming that this is the third mesh):
+Figure~\ref{fig:grid1} gives an example of a polynomial transformation, for which the parameters are specified:
 \begin{lstlisting}
-&TRNX IDERIV=0, CC=0.75, PC=0.75, MESH_NUMBER=3 /
-&TRNX IDERIV=1, CC=0.75, PC=0.50, MESH_NUMBER=3 /
+&MESH ..., TRNX_ID='my trnx' /
+&TRNX ID='my trnx', IDERIV=0, CC=0.75, PC=0.75 /
+&TRNX ID='my trnx', IDERIV=1, CC=0.75, PC=0.50 /
 \end{lstlisting}
 which correspond to the constraints
 $f(0.75)=0.75$ and $\frac{\d f}{\d \xi}(0.75) = 0.5$, or, in words, the
@@ -1354,11 +1363,12 @@ This case demonstrates the use of baroclinic correction for an axially-symmetric
 &MISC DNS=.TRUE. /
 &RADI RADIATION=.FALSE. /
 &SPEC ID='HELIUM'  /
-&SURF ID='HELIUM', VEL=-0.673, MASS_FRACTION(1)=1.0, TAU_MF(1)=0.3 /
+&SURF ID='HELIUM', VEL=-0.673, SPEC_ID(1)='HELIUM',MASS_FRACTION(1)=1.0, TAU_MF(1)=0.3 /
 &VENT MB='XMAX' ,SURF_ID='OPEN' /
 &VENT MB='ZMAX' ,SURF_ID='OPEN' /
 &OBST XB= 0.0,0.036,-0.001,0.001,0.00,0.02, SURF_IDS='HELIUM','INERT','INERT' /
-&DUMP PLOT3D_QUANTITY(1)='PRESSURE',PLOT3D_QUANTITY(5)='HELIUM' /
+&DUMP PLOT3D_QUANTITY(1)='PRESSURE',
+            PLOT3D_QUANTITY(5)='MASS FRACTION',PLOT3D_SPEC_ID(5)='HELIUM' /
 &SLCF PBY=0.000,QUANTITY='DENSITY', VECTOR=.TRUE. /
 &SLCF PBY=0.000,QUANTITY='VOLUME FRACTION', SPEC_ID='HELIUM' /
 &TAIL /
@@ -3952,7 +3962,7 @@ Below are three example duct node inputs representing a typical tee-type connect
 \begin{description}
 \item[{\ct AMBIENT}] is a logical value.  If {\ct .TRUE.}, then the node is connected to the ambient (i.e., it is equivalent to the {\ct OPEN} boundary condition on a {\ct SURF} line).
 \item[{\ct DUCT\_ID}] gives the {\ct ID}s of the ducts connected to the node.  Up to 10 ducts can be connected to a node.
-\item[{\ct FILTER\_ID}] gives the {\ct ID} a filter located at the node.  A node with a filter can only have two connected ducts.
+\item[{\ct FILTER\_ID}] gives the {\ct ID} a filter located at the node.  A node with a filter must have two connected ducts. A filter cannot be located at an ambient node, a node that is attached to a {\ct VENT}, or node with three or more ducts.
 \item[{\ct LOSS}] is an $n$ by $n$ array of real numbers giving the dimensionless loss coefficients for the node.  {\ct LOSS(I,J)} is the loss coefficient for flow from duct {\ct I} to duct {\ct J} expressed in terms of the downstream duct area (see discussion in ~\ref{info:HVACduct} on how to adjust losses for area changes).  For a terminal node (e.g., a node connected to the ambient or to a {\ct VENT}) the {\ct LOSS} is entered as a pair of numbers representing loss coefficient for flow entering the HVAC system and for flow exiting the HVAC system.
 \item[{\ct VENT\_ID}] is the name of the {\ct VENT} where the node connects to the FDS computational domain.  No two {\ct VENTs} should be defined with the same {\ct VENT\_ID}.
 \item[{\ct XYZ}] is a triplet of real numbers giving the coordinates of the node.  This location is used to compute buoyancy heads.
@@ -4063,6 +4073,7 @@ a short passageway that draws gases in one side and expels them out the other. T
 \subsection{HVAC Filter Parameters}
 \label{info:HVACfilter}
 
+A filter must be located at a node with two connected ducts. A filter cannot be located at an ambient node, a node that is attached to a {\ct VENT}, or node with three or more ducts.
 A sample input for a filter is given by:
 \begin{lstlisting}
 &HVAC TYPE_ID='FILTER', ID='filter 1', LOADING=0., SPEC_ID='SOOT',
@@ -4585,7 +4596,7 @@ When simulating a wind with {\ct OPEN} boundaries, you might notice spurious vel
 
 Similar to the mean forcing feature, you may specify a constant and uniform force per unit volume by setting {\ct FORCE\_VECTOR(1:3)} on the {\ct WIND} line.  This is useful, for example, in specifying a mean pressure drop in a duct.  In the absence of other forces, the force vector $F_i$ affects the momentum equation by
 \begin{equation}
-\frac{\partial u_i}{\partial t} + \dots = -F_i/\rho
+\frac{\partial u_i}{\partial t} + \dots = F_i/\rho
 \end{equation}
 This feature is typically used together with periodic boundaries.  To specify a mean pressure drop of 0.01 Pa/m in the $x$ direction for a periodic duct, for example, use
 \begin{lstlisting}
@@ -4595,6 +4606,45 @@ This feature is typically used together with periodic boundaries.  To specify a 
 \end{lstlisting}
 You may apply a time ramp to {\ct FORCE\_VECTOR(1)}, for example, via {\ct RAMP\_FVX\_T} on the {\ct WIND} line.
 
+\subsection{Coriolis Force}
+\label{info:coriolis_force}
+
+The Coriolis force accounts for a rotating reference frame \cite{Stull:2000}.  The Coriolis acceleration augments the right-hand side of the Navier-Stokes equations as follows:
+\begin{equation}
+\DoD{\mathbf{u}}{t} = ... - 2 {\bm\Omega} \times \mathbf{u}
+\end{equation}
+Where is ${\bm\Omega}$ is the rotation vector (see Fig.~\ref{fig:rotation_vector}).  To apply the Coriolis force in FDS, you have two options: either specify the components of ${\bm\Omega}$ directly on the {\ct WIND} lines via {\ct CORIOLIS\_VECTOR(3)}, or you can take the easy route and simply specify the {\ct LATITUDE} (degrees) of the domain, provided you align the $x$ direction with east.  In this latter case, FDS will compute the rotation vector for you as
+\begin{equation}
+\label{eq:earth_rotvec}
+{\bm\Omega} = \omega \left[ \begin{array}{c} 0 \\ \cos(\phi \pi/180) \\ \sin(\phi \pi/180) \end{array} \right]
+\end{equation}
+where $\omega$ is Earth's rotation rate, about $1.16 \times 10^{-5}$ $2\pi$/s.
+
+The nondimensional number that determines if the Coriolis force is significant is the Rossby number.  Let $U$ be the relevant velocity scale and $L$ the length scale of the problem.  The Coriolis freqency is given by $f_c=2 \omega \sin(\phi\pi/180)$.  The Rossby number is then given by
+\begin{equation}
+\label{eq:rossby_number}
+\mbox{Ro} = \frac{U}{f_c L}
+\end{equation}
+When the Rossby number is large, the Coriolis force is negligible.  In building fires, this is typically the case, as $U$ and $L$ are of order unity and $f_c = {\cal O}(10^4)$.
+
+\begin{figure}
+\centering
+\includegraphics[scale=1.5]{FIGURES/Coriolis_vector}
+\caption{The rotation vector ${\bm\Omega}$ points from the Earth's center to the North Pole.  To apply the effect of rotation on our model, we need to know the components of the rotation vector in the reference frame of the computational domain.  Typically, we align the computational domain so that $x$ points east, $y$ points north, and $z$ represents elevation.  The angle $\phi$ [degrees] is the latitude, positive [$0^{\circ}$, $90^{\circ}$] in the northern hemisphere, negative [$0^{\circ}$, $-90^{\circ}$] in the southern hemisphere.  The rotation rate $\omega$ is (obviously) 1 rotation per day or $2\pi/(24 \times 3600) \approx 1.16 \times 10^{-5}$ $2\pi$/s.}
+\label{fig:rotation_vector}
+\end{figure}
+
+
+\subsection{Geostrophic Wind}
+\label{info:geostrophic_wind}
+
+The \emph{geostropic wind} is a theoretical construct obtained from the lateral momentum equations when the Coriolis force is in balance with the horizontal pressure gradient at steady state \cite{Stull:2000}.  The horizontal wind components can be written as
+\begin{align}
+\label{eq:geostrophic_wind}
+U_g &= - \frac{1}{\rho f_c} \frac{\partial \bar{p}}{\partial y} \\
+V_g &= + \frac{1}{\rho f_c} \frac{\partial \bar{p}}{\partial x}
+\end{align}
+If the geostrophic wind speed is known, it can be entered on the {\ct WIND} line via {\ct GEOSTROPHIC\_WIND(1:2)} = $(U_g, V_g)$.  Notice that specification of the wind in $x$ implies a mean pressure gradient in $y$ and vice versa.  When a geostropic wind is specified, FDS converts this value to the implied {\ct FORCE\_VECTOR} according to Eq.~(\ref{eq:geostrophic_wind}).  To achieve the specified geostrophic wind aloft, you must also have the Coriolis force turned on (see Sec.~\ref{info:coriolis_force}).  Since the geostrophic wind is equivalent to applying {\ct FORCE\_VECTOR}, you may also apply a time ramp (see Sec.~\ref{info:force_vector}).
 
 
 \section{Wind Method 3: The ``Wall of Wind''}
@@ -4602,7 +4652,7 @@ You may apply a time ramp to {\ct FORCE\_VECTOR(1)}, for example, via {\ct RAMP\
 
 An alternative to using Monin-Obukhov similarity theory in specifying a wind is to specify a power law wind profile at an external boundary of the computational domain. This essentially creates a ``wall of wind'' and for early versions of FDS it was the recommended method for specifying a wind. However, the techniques described above are preferable because they handle the lateral boundaries of the computational domain in a more natural way.
 
-To specify a ``wall of wind'', set {\ct PROFILE='ATMOSPHERIC'} on the {\ct SURF} line that is assigned to an exterior lateral boundary of the computational domain. This generates a power law atmospheric wind profile of the form $u=u_0 (z/z_0)^p$ where $z$ is the height above the ground. If an atmospheric profile is prescribed, also prescribe {\ct Z0} for $z_0$  and {\ct PLE} for $p$. {\ct VEL} specifies the reference velocity $u_0$. Note that $z_0$ is not the ground, but rather the height above the ground where the wind speed is measured, like an elevated weather station. It is assumed that the ground is located at 0~m; to change this assumption, set {\ct GROUND\_LEVEL} on the {\ct WIND} line to be the appropriate elevation. Be careful not to apply an atmospheric velocity profile (e.g. negative $z$) below {\ct GROUND\_LEVEL} or FDS will stop with an error
+To specify a ``wall of wind'', set {\ct PROFILE='ATMOSPHERIC'} on the {\ct SURF} line that is assigned to an exterior lateral boundary of the computational domain. This generates a power law atmospheric wind profile of the form $u=u_0 (z/z_0)^p$ where $z$ is the height above the ground. If an atmospheric profile is prescribed, also prescribe {\ct Z0} for $z_0$  and {\ct PLE} for $p$. {\ct VEL} specifies the reference velocity $u_0$. Note that $z_0$ is not the ground, but rather the height above the ground where the wind speed is measured, like an elevated weather station. It is assumed that the ground is located at 0~m; to change this assumption, set {\ct GROUND\_LEVEL} on the {\ct WIND} line to be the appropriate elevation. Be careful not to apply an atmospheric velocity profile (e.g. negative $z$) below {\ct GROUND\_LEVEL} or FDS will stop with an error.
 
 Sometimes when using a wall of wind, you may want to initialize the flow to the chosen wind speed throughout the domain, but you may not want this initial wind field to persist indefinitely. In such cases, specify your initial flow components {\ct U0}, {\ct V0}, and/or {\ct W0} directly and do not use the parameter {\ct SPEED}. Setting the velocity components directly will initialize the simulation with a constant flow field, but the flow field will die off unless you add a blower somewhere in the domain.
 
@@ -5380,44 +5430,33 @@ All other species &                  & 0.135        & 1427 \\ \hline
 
 \subsubsection{Extinction Model Verification}
 
-In the verification case called {\ct Extinction/extinction.fds}, a 10 $\times$ 10 array of small sealed boxes are generated, each with a varying initial temperature from 300~K to 1875~K and initial oxygen mass fraction from 0.0115 to 0.2185, combined with the stoichiometric amount of fuel, and the remainder nitrogen. A one-step, complete reaction of methane is assumed:
+In the verification cases called {\ct Extinction/extinction\_x.fds}, 100 small, sealed boxes are initialized with temperatures from 300~K to 1875~K and oxygen mass fractions from 0.0115 to 0.2185, combined with the stoichiometric amount of fuel, and the remainder nitrogen. A one-step, complete reaction of methane is assumed:
 \begin{equation}\label{eq:methane_ex}
 \mathrm{CH_4 + 2\, O_2 \rightarrow  CO_2 + 2\, H_2O}
 \end{equation}
-Based on the oxygen and methane concentration and the temperature in each box, combustion can or cannot occur according to the {\ct 'EXTINCTION~2'} model, as shown in Fig.~\ref{fig:extinct}.
+Based on the oxygen and methane concentration and the temperature in each box, combustion can or cannot occur according to the {\ct 'EXTINCTION~1'} and {\ct 'EXTINCTION~2'} models, as shown in Fig.~\ref{fig:extinct}.
 \begin{figure}[h!]
-\centering
-\includegraphics[height=3.2in]{SCRIPT_FIGURES/extinction}
-\caption[The \textct{extinction} test case]{Viability of combustion for an array of initial temperatures and oxygen concentrations.}
+\includegraphics[height=3.2in]{SCRIPT_FIGURES/extinction_1}
+\includegraphics[height=3.2in]{SCRIPT_FIGURES/extinction_2}
+\caption[The \textct{extinction} test cases]{Result of {\ct 'EXTINCTION~1'} (left) and {\ct 'EXTINCTION~2'} (right) for the given initial temperatures and oxygen concentrations.}
 \label{fig:extinct}
 \end{figure}
-The FDS predictions based on the {\ct 'EXTINCTION~2'} model confirm that conditions that sustain burning (red crosses) or cause extinction (blue stars) fall closely on the expected results using thermophysical properties of the reactants and products.  The simplified linear model, {\ct 'EXTINCTION~1'}, conforms well with the more detailed calculation. More detailed information on the extinction model can be found in the Technical Reference Guide~\cite{FDS_Tech_Guide}.
+The FDS predictions based on the {\ct 'EXTINCTION~2'} model (right) confirm that conditions that sustain burning (red crosses) or cause extinction (blue stars) fall closely on the expected results using thermophysical properties of the reactants and products.  The simpler model, {\ct 'EXTINCTION~1'} (left), merely conforms to the specified Burn-No Burn criterion. More detailed information on the extinction models can be found in the Technical Reference Guide~\cite{FDS_Tech_Guide}.
 
 
 
-\subsection{Special Topic: Piloted Ignition Zone}
+\subsection{Special Topic: Piloted Ignition}
 \label{info:ignition}
 
-If the mixing-controlled combustion model is used and flame extinction occurs, the unburned fuel gas can re-ignite if it mixes with sufficient oxygen elsewhere in the domain. To prevent this from happening, you can set the {\ct AUTO\_IGNITION\_TEMPERATURE} (AIT) on the {\ct REAC} line, in \si{\degree C}, below which combustion will not occur. Note that if this parameter is used, then some form of heat/ignition source must be present. For most fuels of interest, the AIT may be found in Beyler's chapter of the SFPE Handbook~\cite{SFPE:Beyler}. The default AIT is -273~$^\circ$, meaning that it is possible to get spurious re-ignition of unburned fuel when fresh air is encountered after extinction. Setting an AIT, however, leads to the problem of ignition at a burner surface.  It can be tricky to model the ignition process explicitly because of limited grid resolution. Instead, you can set a fictitiously low value on the {\ct SURF} line that is associated with the burning surface or the {\ct INIT} line that essentially creates a piloted ignition zone in the vicinity of the burning surface. For example, you might use something like this for a piloted methane flame:
-\begin{lstlisting}
-&REAC FUEL='METHANE', AUTO_IGNITION_TEMPERATURE=627. /
-&INIT XB=..., AUTO_IGNITION_TEMPERATURE=-273. /
-\end{lstlisting}
-The {\ct REAC} line specifies an AIT of 627~\si{\degreeCelsius} throughout the domain except within the region specified by {\ct XB} at the base of the burner where the AIT is effectively turned off. You can achieve a similar end with the following {\ct SURF} line:
-\begin{lstlisting}
-&REAC FUEL='METHANE', AUTO_IGNITION_TEMPERATURE=627. /
-&SURF ..., HRRPUA=..., AUTO_IGNITION_TEMPERATURE=-273. /
-\end{lstlisting}
+By default, FDS employs either the {\ct 'EXTINCTION 1'} or {\ct 'EXTINCTION 2'} model to determine if combustion is viable. If local extinction occurs, the unburned fuel gas can re-ignite if it mixes with sufficient oxygen elsewhere in the domain, even if this re-ignition might not happen in reality because the temperature might be too low to sustain combustion. To prevent spurious re-ignition from happening, you can set the {\ct AUTO\_IGNITION\_TEMPERATURE} (AIT) on the {\ct REAC} line or the {\ct COMB} line, in \si{\degree C}, below which combustion will not occur.  For most fuels of interest, the AIT may be found in Beyler's chapter of the SFPE Handbook~\cite{SFPE:Beyler}. The default AIT is $-273 \; ^\circ$C, meaning that fuel and oxygen will burn when mixed providing that either of the extinction models allows combustion to occur.
 
-\subsection{Special Topic: Time Ramp of Ignition Temperature}
-\label{info:ramp_ait}
-
-The AIT for a given reaction may be ramped in time using {\ct RAMP\_AIT} on the {\ct REAC} line.  The ramp factor {\ct F} is applied to the AIT in Kelvins.  For example, to ramp AIT from -273 \si{\degreeCelsius} to 627 \si{\degreeCelsius} linearly over 10 s use
+The value of AIT may need to be lowered for cases where the grid size is greater than 10~cm. The purpose of AIT is simply to prevent fuel and oxygen from spontaneously igniting, which is the default behavior of FDS. If an AIT is specified, then some form of heat/ignition source must be present to start the fire. FDS provides a ``spark'' as follows
 \begin{lstlisting}
-&REAC ID='R1', FUEL='METHANE', AUTO_IGNITION_TEMPERATURE=627., RAMP_AIT='R1 AIT RAMP' /
-&RAMP ID='R1 AIT RAMP', T=0., F=0. /
-&RAMP ID='R1 AIT RAMP', T=10., F=1. /
+&INIT PART_ID='FDS SPARK', XYZ=..., N_PARTICLES=1, T_INSERT=10. /
 \end{lstlisting}
+This line creates a hot, burning particle at the location {\ct XYZ} starting at {\ct T\_INSERT} (s) and lasting a short amount of time. The character string {\ct 'FDS SPARK'} is a reserved phrase that directs FDS to generate internally the necessary {\ct SURF} and {\ct PART} lines that describe the igniter. If you want to generate your own ``spark'', do not use the string {\ct 'FDS SPARK'}.
+
+The spark igniter serves two purposes. First, within its single grid cell it generates a temperature greater than AIT and allows combustion to proceed; and second, it generates a local heat release rate per unit volume (HRRPUV) of $10/\Delta$~kW/m$^3$, where $\Delta=(\dx \, \dy \, \dz)^{1/3}$. Neighboring cells are assumed to support combustion if either their temperature exceeds AIT, or if they abut a cell with an HRRPUV exceeding $10/\Delta$~kW/m$^3$. You can change the local HRRPUV by specifying {\ct HRRPUV\_SPARK} on the {\ct COMB} line in units of kW/m$^3$. You can change the default spark temperature ($1000 \, ^\circ$C) by specifying {\ct TMP\_SPARK} on the {\ct COMB} line. The duration of the spark is $\Delta/s_L$~s, where $s_L$ is the {\ct LAMINAR\_FLAME\_SPEED}\footnote{Note that the {\ct LAMINAR\_FLAME\_SPEED} has no role in FDS other than to provide a simple scaling relationship for the igniter duration.}, also set on the {\ct COMB} line. Its default value is 0.4~m/s. You can change the duration of the spark by specifying {\ct DT\_SPARK} on the {\ct COMB} line.
 
 
 
@@ -5431,12 +5470,10 @@ the stoichiometry of the reaction.
 \subsection{Balancing the Atoms}
 
 Consider a single reaction involving methane. When you specify the {\ct REAC} line to be:
-
 \begin{lstlisting}
 &REAC FUEL='METHANE' /
 \end{lstlisting}
-
-\noindent FDS assumes the following reaction:
+FDS assumes the following reaction:
 \begin{multline}
 1\,\underbrace{\mathrm{ (CH_4) }}_\text{Fuel} \; + \;
 9.636 \; \underbrace{ \mathrm{\left( 0.2076 \; O_2 + 0.7825 \; N_2 + 0.0095 \; H_2O + 0.0004 \; CO_2 \right)}}_\text{Air} \longrightarrow \\
@@ -5890,6 +5927,7 @@ Note: The sign of {\ct NU} corresponds to whether that species is consumed (-) o
 
 If soot deposition is being computed, the soot present on surfaces can undergo oxidation if the local temperature is high enough and oxygen is present. Soot oxidation is enabled with the logical flag {\ct SOOT\_OXIDATION} on the {\ct MISC} input. Oxidation is computed as a single step, Arrhenius reaction using the soot surface density and the local oxygen mole fraction. The reaction uses a rate constant of $4.7 \times 10^{12}$ and an activation energy of 211~kJ/mol. These values are based upon work performed by Hartman, Beyler, Riahi, and Beyler~\cite{Hartman_2012}.
 
+Soot oxidation cannot be used with simple chemistry; you must use primitve species. See the {\ct soot\_oxidation\_wall} example case in the Verification Guide.
 
 \section{Special Topic: Aerosol Agglomeration}
 \label{info:agglomeration}
@@ -6242,7 +6280,7 @@ distributed about the median value.
 \includegraphics[height=2.2in]{SCRIPT_FIGURES/droplet_distributions_3} &
 \includegraphics[height=2.2in]{SCRIPT_FIGURES/droplet_distributions_4}
 \end{tabular}
-\caption[Droplet size distributions]{Droplet size distributions. The first three plots are based on a specified CVF from which the CNF is derived. The fourth plot (lower right) is an example of a specified CNF from which the CVF is derived. CVF:s are plotted with black lines, while CNF:s are plotted with red lines. The solid lines show the prescribed sampling distribution, while the dashed lines show the actual sampled droplet size distribution, measured with the {\ct PDPA\_HISTOGRAM} functionality.}
+\caption[Droplet size distributions]{Droplet size distributions. The first three plots are based on a specified CVF (black curves) from which the CNF (red curves) is derived. The fourth plot (lower right) is an example of a specified CNF from which the CVF is derived. The solid lines show the prescribed sampling distribution, while the dashed lines show the actual sampled droplet size distribution, measured with the {\ct PDPA\_HISTOGRAM} functionality.}
 \label{droplet_distributions}
 \end{figure}
 
@@ -6541,7 +6579,7 @@ where $l$ is the screen thickness (equal to the wire diameter), $\mu$ is the vis
    K &=& 3.44 \times 10^{-9} \; \hbox{\ct FREE\_AREA\_FRACTION}^{1.6} \; \; \hbox{m}^2 \\
    Y &=& 0.043 \; \hbox{\ct FREE\_AREA\_FRACTION}^{2.13}
 \end{eqnarray}
-This correlation was developed using screens with {\ct FREE\_AREA\_FRACTION} ranging from ~0.3 to ~0.6. 
+This correlation was developed using screens with {\ct FREE\_AREA\_FRACTION} ranging from ~0.3 to ~0.6.
 
 The {\ct MISC} input parameter {\ct PARTICLE\_CFL\_MAX} controls the time step on the pressure drop across a screen (or other porous media). If a screen or other porous media introduces numerical instabilities, reducing the value of {\ct PARTICLE\_CFL\_MAX} below 1 may resolve them.
 
@@ -6701,6 +6739,11 @@ Note that the {\ct DIAMETER} ($\mu$m) on the {\ct INIT} line is only valid for l
 If you want to introduce particles within a given region periodically in time and not just initially, set {\ct DT\_INSERT} on the {\ct INIT} line to a positive value indicating the time increment (s) for insertion. The parameter {\ct N\_PARTICLES} now indicates the number of droplets/particles inserted every {\ct DT\_INSERT} seconds. If the droplets/particles have mass, use {\ct MASS\_PER\_TIME} (kg/s) instead of {\ct MASS\_PER\_VOLUME} to indicate how much mass is to be introduced per second.
 
 If you want to delay the insertion of droplets, you can use either a {\ct DEVC\_ID} or a {\ct CTRL\_ID} on the {\ct INIT} line to name the controlling device. See Section~\ref{info:basic_control} for more information on controlling devices.
+
+\subsubsection{Delayed Insertion}
+\label{info:delayed_insertion}
+
+If you do not want to introduce the particles right at the start of the simulation, use {\ct T\_INSERT} (s) to insert the particle(s) at some later time.
 
 
 \clearpage
@@ -8424,11 +8467,13 @@ For solid phase output quantities, like heat fluxes and surface temperatures, th
 
 \subsubsection{Minimum or Maximum Value}
 
-For a gas phase scalar quantity defined at the center of each grid cell, $\phi_{ijk}$, set {\ct SPATIAL\_STATISTIC} to {\ct ='MIN'} or {\ct 'MAX'} to compute the minimum or maximum value, respectively, over the cells that are included in the specified volume bounded by {\ct XB}:
+For a scalar quantity defined at the center of gas or solid phase cells, $\phi_{ijk}$, set {\ct SPATIAL\_STATISTIC} to {\ct 'MIN'} or {\ct 'MAX'} to compute the minimum or maximum value, respectively, over the cells that are included in the specified volume bounded by {\ct XB}:
 \be
    \min_{ijk} \, \phi_{ijk} \quad ; \quad  \max_{ijk} \, \phi_{ijk}
 \ee
-Note that this statistic is only appropriate for gas phase quantities. Note also that you must specify a volume to sum over via the coordinate parameters, {\ct XB}, which can extend into multiple meshes.
+Note also that you must specify a volume to sum over via the coordinate parameters, {\ct XB}, which can extend into multiple meshes.
+
+If you want to know where the specified {\ct QUANTITY} achieves its minimum or maximum value over the specified volume {\ct XB}, set {\ct SPATIAL\_STATISTIC} to {\ct 'MINLOC X'} or {\ct 'MAXLOC X'} for the $x$ coordinate. Substitute {\ct Y} or {\ct Z} if you desire the $y$ or $z$ coordinate, in m.
 
 
 \subsubsection{Average Value}
@@ -8468,6 +8513,12 @@ For a gas phase scalar quantity, $\phi(x,y,z)$, {\ct SPATIAL\_STATISTIC='AREA IN
 where $dA$ depends on the coordinates you specify for {\ct XB}. Note that this statistic is only appropriate for gas phase quantities, in particular those whose units involve m$^{-2}$. For example,
 the quantity {\ct 'MASS FLUX X'} along with {\ct SPEC\_ID='my gas'} is an appropriate output quantity if you want to know the mass flux of the gas species that you have named {\ct 'my gas'} through an
 area normal to the $x$ direction. Note also that you must specify an area to sum over via the coordinate parameters, {\ct XB}, which can extend into multiple meshes.
+
+\subsubsection{Area}
+
+This feature is usually used in conjunction with {\ct SPATIAL\_STATISTIC='AREA INTEGRAL'} above (use two separate {\ct DEVC} lines, each with the same {\ct QUANTITY}). When performing precise mass and energy balances, it is useful to know exactly the area of {\ct VENT} or {\ct SURF} of interest. Note that this may differ slightly from what is specified in the input file due to grid snapping for Cartesian geometries or due to the approximations used to represent curvilinear geometries.  Using {\ct SPATIAL\_STATISTIC='AREA'} produces the discrete analog of
+\be \int \; \d A \ee
+where $dA$ depends on the coordinates you specify for {\ct XB} or the discrete area of a {\ct SURF}.  Knowing this value is useful for reconstructing the average flux on a surface.
 
 \subsubsection{Surface Integral}
 
@@ -8696,33 +8747,32 @@ The quality of a particular simulation is most directly tied to grid resolution.
 
 A scalar quantity referred to as the \emph{measure of turbulence resolution} \cite{Pope:2004} is defined locally as:
 \begin{eqnarray}
+\label{eq:MTR}
 M(\mathbf{x}) = \frac{\left\langle k_{\rm sgs} \right\rangle}{\left\langle \mbox{TKE} \right\rangle + \left\langle k_{\rm sgs} \right\rangle}
 \end{eqnarray}
-where the resolved turbulent kinetic energy per unit mass is:
-\vskip-.6cm
-\begin{align}
-\mbox{TKE} &= \mbox{$\frac{1}{2}$}(\textbf{u}_i - \left\langle \textbf{u}_i \right\rangle) (\textbf{u}_i - \left\langle \textbf{u}_i \right\rangle)
-\end{align}
-Where $\textbf{u}$ is the cell centered velocity vector from the velocity components at cell faces (i.e. $ \tilde{\textbf{u}}=\left( \bar{u},\bar{v},\bar{w} \right) $), angled brackets denote time-averaged values and subscript $i$ indicate grid indices. To output resolved TKE use the following {\ct DEVC}s to output the three velocity components:
+Angled brackets denote suitable time-averages.
+
+The turbulent kinetic energy (TKE) must be post processed because we cannot compute the fluctuation until we know the mean. Use the following {\ct DEVC}s to output the three velocity components:
 
 \begin{lstlisting}
 &DEVC ..., QUANTITY='U-VELOCITY' /
 &DEVC ..., QUANTITY='V-VELOCITY' /
 &DEVC ..., QUANTITY='W-VELOCITY' /
 \end{lstlisting}
-
-The output of these {\ct DEVC}s must be post-processed to obtain resolved TKE. First, output the velocity vector $\textbf{u}$ using the velocity components, choose a suitable time-averaging period (which will be case-specific), output a mean velocity $\left\langle \textbf{u} \right\rangle$ and hence the fluctuation in velocity $(\textbf{u} - \left\langle \textbf{u} \right\rangle)$.
-
-The subgrid kinetic energy is estimated from Deardorff's eddy viscosity model
+TKE is then computed by
+\vskip-.6cm
+\begin{gather}
+  \mbox{TKE} = \mbox{$\frac{1}{2}$} \big( (\tilde{u}-\left\langle \tilde{u} \right\rangle)^2 + (\tilde{v}-\left\langle \tilde{v} \right\rangle)^2 +(\tilde{w}-\left\langle \tilde{w} \right\rangle)^2 \big)
+\end{gather}
+The subgrid kinetic energy is estimated from Deardorff's eddy viscosity model (see \cite{FDS_Math_Guide})
 \begin{align}
-k_{\rm sgs} &\approx \mbox{$\frac{1}{2}$}(\tilde{u}_i - \hat{\tilde{u}}_i)(\tilde{u}_i - \hat{\tilde{u}}_i) = ( \mu_t/(\rho C_\nu \Delta) )^2
+k_{\rm sgs} &\approx ( \mu_t/(\rho C_\nu \Delta) )^2
 \end{align}
-Here, $C_\nu$ is the Deardorff eddy viscosity model constant, $\tilde{u}_i$ is the resolved LES velocity and $\hat{\tilde{u}}_i$ is test filtered at a scale $2\Delta$ where $\Delta$ is the LES filter width (in FDS, $\Delta=\delta x$).  In the bulk flow region, the model for the SGS fluctuations is taken from scale similarity \cite{Bardina:1980}.  Cross-term energy is ignored.  Keep in the mind, however, that the test filter operation is ill-defined near walls, and so FDS employs constant Smagorinsky in these cells to compute the eddy viscosity.
-
 To output an estimate of the subgrid kinetic energy per unit mass use
 \begin{lstlisting}
 &DEVC ..., QUANTITY='SUBGRID KINETIC ENERGY' /
 \end{lstlisting}
+You should then average TKE and $k_{sgs}$ for use in (\ref{eq:MTR}).
 
 The concept behind the measure of turbulence resolution is illustrated in Figure \ref{fig_mtr}. Notice that on the left the difference between the grid signal and the test signal is very small.  On the right, the grid signal is highly turbulent and the corresponding test signal is much smoother.  We infer then that the flow is under-resolved.
 \begin{figure}[ht]
@@ -9170,6 +9220,7 @@ of a {\ct DUCT\_ID}, and quantities for a node require the specification of a {\
 \endhead
 {\ct AIRCOIL HEAT EXCHANGE}                     & Heat exchange rate for an aircoil         &  kW                   \\ \hline
 {\ct DUCT DENSITY}                              & Density of the flow in a duct             &  kg/m$^3$             \\ \hline
+{\ct DUCT ENERGY FLOW}                          & Energy flow in a duct                     &  kW                   \\ \hline
 {\ct DUCT MASS FLOW}                            & Mass flow in a duct                       &  kg/s                 \\ \hline
 {\ct DUCT MASS FRACTION}                        & Mass fraction of a species in a duct      &  kg/kg                \\ \hline
 {\ct DUCT TEMPERATURE}                          & Temperature of the flow in a duct         & $^\circ$C             \\ \hline
@@ -9180,6 +9231,7 @@ of a {\ct DUCT\_ID}, and quantities for a node require the specification of a {\
 {\ct FILTER LOADING}                            & Loading of a species in a filter          &  kg                   \\ \hline
 {\ct FILTER LOSS}                               & Flow loss through a filter                &                       \\ \hline
 {\ct NODE DENSITY}                              & Density of the flow through a node        &  kg/m$^3$             \\ \hline
+{\ct NODE ENTHALPY}                             & Enthalpy of a node                        &  kJ/kg                \\ \hline
 {\ct NODE MASS FRACTION}                        & Mass fraction of a species in a node      &  kg/kg                \\ \hline
 {\ct NODE PRESSURE}                             & Pressure of a node                        &       Pa              \\ \hline
 {\ct NODE PRESSURE DIFFERENCE}                  & Pressure difference between two nodes     &       Pa              \\ \hline
@@ -9278,13 +9330,16 @@ properties be specified as well. Simply prescribing as many properties as possib
 \multicolumn{5}{|c|}{{\ct COMB} (General combustion parameters)} \\
 \hline \hline
 \endhead
+{\ct AUTO\_IGNITION\_TEMPERATURE}               & Real          & Section~\ref{info:ignition}                           & $^\circ$C     &  -273 $^\circ$C      \\ \hline
 {\ct CHECK\_REALIZABILITY}                      & Logical       & Section~\ref{info:chem_integration}                   &               & {\ct .FALSE.}        \\ \hline
+{\ct DT\_SPARK}                                 & Real          & Section~\ref{info:ignition}                           &  s            &  $\Delta/s_L$        \\ \hline
 {\ct EXTINCTION\_MODEL}                         & Character     & Section~\ref{info:extinction}                         &               & {\ct 'EXTINCTION 2'} \\ \hline
 {\ct FIXED\_MIX\_TIME}                          & Real          & Section~\ref{info:turbulent_combustion}               &  s            &                      \\ \hline
 {\ct FUEL\_C\_TO\_CO\_FRACTION}                 & Real          & Section~\ref{info:two-step_simple_chemistry}          &               &  2/3                 \\ \hline
 {\ct FUEL\_H\_TO\_H2\_FRACTION}                 & Real          & Section~\ref{info:two-step_simple_chemistry}          &               &  0                   \\ \hline
 %{\ct HRRPUV\_MAX\_SMV}                          & Real          & Section~\ref{}                                        &  kW/m$^3$     & 1200                 \\ \hline
 {\ct INITIAL\_UNMIXED\_FRACTION}                & Real          & Section~\ref{info:turbulent_combustion}               &               & 1.0                  \\ \hline
+{\ct LAMINAR\_FLAME\_SPEED}                     & Real          & $s_L$, Section~\ref{info:ignition}                    & m/s           & 0.4                  \\ \hline
 {\ct MAX\_CHEMISTRY\_SUBSTEPS}                  & Integer       & Section~\ref{info:chem_integration}                   &               & 20                   \\ \hline
 {\ct N\_FIXED\_CHEMISTRY\_SUBSTEPS}             & Integer       & Section~\ref{info:chem_integration}                   &               & -1                   \\ \hline
 {\ct N\_SIMPLE\_CHEMISTRY\_REACTIONS}           & Integer       & Section~\ref{info:two-step_simple_chemistry}          &               & 1                    \\ \hline
@@ -9293,7 +9348,7 @@ properties be specified as well. Simply prescribing as many properties as possib
 {\ct SUPPRESSION}                               & Logical       & Section~\ref{info:extinction}                         &               & {\ct .TRUE.}         \\ \hline
 {\ct TAU\_CHEM}                                 & Real          & Section~\ref{info:turbulent_combustion}               &               & 1.E-10               \\ \hline
 {\ct TAU\_FLAME}                                & Real          & Section~\ref{info:turbulent_combustion}               &               & 1.E10                \\ \hline
-%{\ct TEMPERATURE\_DEPENDENT\_REACTION}          & Logical       & Compute mixed zone reactor temperature                &               & {\ct .FALSE.}        \\ \hline
+{\ct TMP\_SPARK}                                & Real          & Section~\ref{info:ignition}                           & $^\circ$C     & 1000                 \\ \hline
 \end{longtable}
 
 \vspace{\baselineskip}
@@ -9634,7 +9689,6 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \multicolumn{5}{|c|}{{\ct INIT} (Initial Conditions)} \\
 \hline \hline
 \endhead
-{\ct AUTO\_IGNITION\_TEMPERATURE} & Real              & Section~\ref{info:extinction}                 & \si{\degree C} & {-273.15}     \\ \hline
 {\ct CELL\_CENTERED}              & Logical           & Section~\ref{info:initial_droplets}           &                & {\ct .FALSE.} \\ \hline
 {\ct CTRL\_ID}                    & Character         & Section~\ref{info:initial_droplets}           &                &               \\ \hline
 {\ct DENSITY}                     & Real              & Section~\ref{info:INIT}                       & kg/m$^3$       & Ambient       \\ \hline
@@ -9659,6 +9713,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct SHAPE}                       & Character         & Section~\ref{info:initial_droplets}           &                & {\ct 'BLOCK'} \\ \hline
 {\ct SPEC\_ID(N)}                 & Character Array   & Section~\ref{info:INIT}                       &                &               \\ \hline
 {\ct TEMPERATURE}                 & Real              & Section~\ref{info:INIT}                       & \si{\degree C} & {\ct TMPA}    \\ \hline
+{\ct T\_INSERT}                   & Real              & Section~\ref{info:delayed_insertion}          & s              & {\ct T\_BEGIN}\\ \hline
 {\ct UNIFORM}                     & Logical           & Section~\ref{info:initial_droplets}           &                & {\ct .FALSE.} \\ \hline
 {\ct UVW(3)}                      & Real Triplet      & Section~\ref{info:initial_droplets}           & m/s            & 0.            \\ \hline
 {\ct VOLUME\_FRACTION(N)}         & Real Array        & Section~\ref{info:INIT}                       & mol/mol        & Ambient       \\ \hline
@@ -9771,7 +9826,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \multicolumn{5}{|c|}{{\ct MESH} (Mesh Parameters)} \\
 \hline \hline
 \endhead
-{\ct CHECK\_MESH\_ALIGNMENT}         & Logical                       & Section~\ref{info:mesh_alignment}        &    & {\ct .FALSE.}    \\ \hline
+{\ct CHECK\_MESH\_ALIGNMENT}         & Logical                       & Section~\ref{info:mesh_alignment}         &    & {\ct .FALSE.}    \\ \hline
 {\ct COLOR}                          & Character                     & Section~\ref{info:multimesh}              &    & {\ct 'BLACK'}    \\ \hline
 {\ct CYLINDRICAL}                    & Logical                       & Section~\ref{info:2D}                     &    & {\ct .FALSE.}    \\ \hline
 {\ct EVACUATION}                     & Logical                       & Reference~\cite{FDS_Evac_Users_Guide}     &    & {\ct .FALSE.}    \\ \hline
@@ -9784,6 +9839,9 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct N\_THREADS}                     & Integer                       & Section~\ref{info:multimesh}              &    &                  \\ \hline
 {\ct MULT\_ID }                      & Character                     & Section~\ref{info:MULT}                   &    &                  \\ \hline
 {\ct RGB}                            & Integer Triplet               & Section~\ref{info:multimesh}              &    & 0,0,0            \\ \hline
+{\ct TRNX\_ID}                       & Character                     & Section~\ref{info:TRNX}                   &    &                  \\ \hline
+{\ct TRNY\_ID}                       & Character                     & Section~\ref{info:TRNX}                   &    &                  \\ \hline
+{\ct TRNZ\_ID}                       & Character                     & Section~\ref{info:TRNX}                   &    &                  \\ \hline
 {\ct XB(6)}                          & Real Sextuplet                & Section~\ref{info:MESH_Basics}            & m  & 0,1,0,1,0,1      \\ \hline
 \end{longtable}
 
@@ -10120,7 +10178,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct ITERATION\_SUSPEND\_FACTOR}    & Real          & Section~\ref{pressure_solver}           & s             & 0.95                      \\ \hline
 {\ct MAX\_PRESSURE\_ITERATIONS}     & Integer       & Section~\ref{pressure_solver}           &               & 10                        \\ \hline
 {\ct PRESSURE\_RELAX\_TIME}         & Real          & Section~\ref{background_pressure}       & s             & 1.                        \\ \hline
-{\ct PRESSURE\_TOLERANCE}           & Real          & Section~\ref{pressure_solver}           & m/s$^2$       &                           \\ \hline
+{\ct PRESSURE\_TOLERANCE}           & Real          & Section~\ref{pressure_solver}           & s$^{-2}$      &                           \\ \hline
 {\ct RELAXATION\_FACTOR}            & Real          & Section~\ref{background_pressure}       &               & 1.                        \\ \hline
 {\ct SOLVER}                        & Character     & Section~\ref{optional_pressure_solver}  &               & {\ct 'FFT'}               \\ \hline
 {\ct SUSPEND\_PRESSURE\_ITERATIONS} & Logical       & Section~\ref{pressure_solver}           &               & {\ct .TRUE.}              \\ \hline
@@ -10338,7 +10396,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \hline \hline
 \endhead
 {\ct A}                                   & Real        & Section~\ref{info:finite}                 &                   &                   \\ \hline
-{\ct AUTO\_IGNITION\_TEMPERATURE}         & Real        & Section~\ref{info:extinction}             & $^\circ$C         &                   \\ \hline
+{\ct AUTO\_IGNITION\_TEMPERATURE}         & Real        & Section~\ref{info:ignition}               & $^\circ$C         & -273 $^\circ$C    \\ \hline
 {\ct C}                                   & Real        & Section~\ref{info:simple_chemistry}       &                   & 0                 \\ \hline
 {\ct CHECK\_ATOM\_BALANCE}                & Logical     & Section~\ref{info:REAC_Diagnostics}       &                   & {\ct .TRUE.}      \\ \hline
 {\ct CO\_YIELD}                           & Real        & Section~\ref{info:simple_chemistry}       & kg/kg             & 0                 \\ \hline
@@ -10362,7 +10420,6 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct O}                                   & Real        & Section~\ref{info:simple_chemistry}       &                   & 0                 \\ \hline
 {\ct PRIORITY}                            & Integer     & Section~\ref{info:priority}               &                   & 1                 \\ \hline
 {\ct RADIATIVE\_FRACTION}                 & Real        & Section~\ref{info:CHI_R}                  &                   &                   \\ \hline
-{\ct RAMP\_AIT}                           & Character   & Section~\ref{info:ramp_ait}               &                   &                   \\ \hline
 {\ct RAMP\_CHI\_R}                        & Character   & Section~\ref{info:CHI_R}                  &                   &                   \\ \hline
 {\ct REAC\_ATOM\_ERROR}                   & Real        & Section~\ref{info:REAC_Diagnostics}       & atoms             & 1.E-5             \\ \hline
 {\ct REAC\_MASS\_ERROR}                   & Real        & Section~\ref{info:REAC_Diagnostics}       & kg/kg             & 1.E-4             \\ \hline
@@ -10488,7 +10545,6 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \hline \hline
 \endhead
 {\ct ADIABATIC}                         & Logical         & Section~\ref{info:adiabatic}              &                     & {\ct .FALSE.}           \\ \hline
-{\ct AUTO\_IGNITION\_TEMPERATURE}       & Real            & Section~\ref{info:ignition}               & $^\circ$C           & -273                    \\ \hline
 {\ct BACKING}                           & Character       & Section~\ref{info:BACKING}                &                     & {\ct 'EXPOSED'}         \\ \hline
 {\ct BURN\_AWAY}                        & Logical         & Section~\ref{info:BURN_AWAY}              &                     & {\ct .FALSE.}           \\ \hline
 {\ct CELL\_SIZE\_FACTOR}                & Real            & Section~\ref{info:solid_phase_stability}  &                     & 1.0                     \\ \hline
@@ -10663,6 +10719,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \hline \hline
 \endhead
 {\ct CC    }            & Real          & Section~\ref{info:TRNX}   & m            &     \\ \hline
+{\ct ID}                & Character     & Section~\ref{info:TRNX}   &              &     \\ \hline
 {\ct IDERIV}            & Integer       & Section~\ref{info:TRNX}   &              &     \\ \hline
 {\ct MESH\_NUMBER}      & Integer       & Section~\ref{info:TRNX}   &              &     \\ \hline
 {\ct PC    }            & Real          & Section~\ref{info:TRNX}   &              &     \\ \hline
@@ -10737,13 +10794,15 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \multicolumn{5}{|c|}{{\ct WIND} (Wind and atmospheric parameters)} \\
 \hline \hline
 \endhead
-%{\ct CORIOLIS\_VECTOR(3)}                       & Real          &                                               &               & 0.                \\ \hline
+{\ct CORIOLIS\_VECTOR(3)}                       & Real          & Section~\ref{info:coriolis_force}             &               & 0.                \\ \hline
 {\ct DIRECTION}                                 & Real          & Section~\ref{info:WIND}                       & degrees       & 270               \\ \hline
 {\ct DT\_MEAN\_FORCING}                         & Real          & Section~\ref{info:WIND}                       & s             & 1.                \\ \hline
 {\ct FORCE\_VECTOR(3)}                          & Real          & Section~\ref{info:force_vector}               &               & 0.                \\ \hline
+{\ct GEOSTROPHIC\_WIND(2)}                      & Real          & Section~\ref{info:geostrophic_wind}           & m/s           &                   \\ \hline
 {\ct GROUND\_LEVEL}                             & Real          & Section~\ref{info:stratification}             & m             & 0.                \\ \hline
 {\ct L}                                         & Real          & Section~\ref{info:WIND}                       & m             & 0                 \\ \hline
 {\ct LAPSE\_RATE}                               & Real          & Section~\ref{info:stratification}             & $^\circ$C/m   & 0                 \\ \hline
+{\ct LATITUDE}                                  & Real          & Section~\ref{info:coriolis_force}             & degrees       &                   \\ \hline
 {\ct RAMP\_DIRECTION}                           & Character     & Section~\ref{info:WIND}                       &               &                   \\ \hline
 {\ct RAMP\_FVX\_T}                              & Character     & Section~\ref{info:force_vector}               &               &                   \\ \hline
 {\ct RAMP\_FVY\_T}                              & Character     & Section~\ref{info:force_vector}               &               &                   \\ \hline

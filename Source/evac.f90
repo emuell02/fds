@@ -623,7 +623,7 @@ CONTAINS
           VERTICAL_LANDING_SEPARATION = 0._EB
           EVAC_Z_OFFSET               = 1.0_EB
           !
-          CALL CHECKREAD('STRS',LU_INPUT,IOS)
+          CALL CHECKREAD('STRS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
           IF (IOS == 1) THEN
              EXIT READ_STRS_LOOP
           END IF
@@ -699,7 +699,7 @@ CONTAINS
           COUNT_DENSITY = .FALSE.
           COLOR_INDEX   = -1
 
-          CALL CHECKREAD('EXIT', LU_INPUT, IOS)
+          CALL CHECKREAD('EXIT', LU_INPUT, IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
           IF (IOS == 1) THEN
              EXIT READ_EXIT_LOOP_0
           END IF
@@ -829,7 +829,7 @@ CONTAINS
           VENT_FFIELD   = 'null'
           COLOR_INDEX   = -1
 
-          CALL CHECKREAD('DOOR', LU_INPUT, IOS)
+          CALL CHECKREAD('DOOR', LU_INPUT, IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
           IF (IOS == 1) THEN
              EXIT READ_DOOR_LOOP_0
           END IF
@@ -971,7 +971,7 @@ CONTAINS
        CALL ChkMemErr('READ_EVAC','Tsteps',IZERO)
        Tsteps(:) = EVAC_DT_FLOWFIELD
        IF (ABS(TIME_SHRINK_FACTOR-1.0_EB) >= TWO_EPSILON_EB ) THEN
-          CALL SHUTDOWN('ERROR: Evac is not ready for TIME_SHRINK_FACTOR')
+          CALL SHUTDOWN('ERROR: Evac is not ready for TIME_SHRINK_FACTOR',PROCESS_0_ONLY=.FALSE.)
           RETURN
        END IF
     END IF
@@ -1067,7 +1067,7 @@ CONTAINS
          MAX_HUMANS_DIM = 10000 ! Maximum number of agents in an evacuation mesh
          REWIND(LU_INPUT) ; INPUT_FILE_LINE_NUMBER = 0
          COUNT_PERS_LOOP: DO
-            CALL CHECKREAD('PERS',LU_INPUT,IOS)
+            CALL CHECKREAD('PERS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_PERS_LOOP
             END IF
@@ -1087,7 +1087,7 @@ CONTAINS
          NPC_EVAC = 0
          COUNT_EVAC_LOOP: DO
             NUMBER_INITIAL_PERSONS = 0
-            CALL CHECKREAD('EVAC',LU_INPUT,IOS)
+            CALL CHECKREAD('EVAC',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_EVAC_LOOP
             END IF
@@ -1111,7 +1111,7 @@ CONTAINS
          COUNT_EXITS_LOOP: DO
             COUNT_ONLY = .FALSE.
             COUNT_DENSITY = .FALSE.
-            CALL CHECKREAD('EXIT',LU_INPUT,IOS)
+            CALL CHECKREAD('EXIT',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_EXITS_LOOP
             END IF
@@ -1133,7 +1133,7 @@ CONTAINS
          !
          N_DOORS = 0
          COUNT_DOORS_LOOP: DO
-            CALL CHECKREAD('DOOR',LU_INPUT,IOS)
+            CALL CHECKREAD('DOOR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_DOORS_LOOP
             END IF
@@ -1155,7 +1155,7 @@ CONTAINS
          COUNT_ENTRYS_LOOP: DO
             MAX_FLOW        = 0.0_EB
             MAX_HUMANS_RAMP = 'null'
-            CALL CHECKREAD('ENTR',LU_INPUT,IOS)
+            CALL CHECKREAD('ENTR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_ENTRYS_LOOP
             END IF
@@ -1175,7 +1175,7 @@ CONTAINS
          !
          N_CORRS = 0
          COUNT_CORRS_LOOP: DO
-            CALL CHECKREAD('CORR',LU_INPUT,IOS)
+            CALL CHECKREAD('CORR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_CORRS_LOOP
             END IF
@@ -1192,7 +1192,7 @@ CONTAINS
          !
          N_HOLES = 0
          COUNT_EVHO_LOOP: DO
-            CALL CHECKREAD('EVHO',LU_INPUT,IOS)
+            CALL CHECKREAD('EVHO',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_EVHO_LOOP
             END IF
@@ -1209,7 +1209,7 @@ CONTAINS
          !
          N_SSTANDS = 0
          COUNT_EVSS_LOOP: DO
-            CALL CHECKREAD('EVSS',LU_INPUT,IOS)
+            CALL CHECKREAD('EVSS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_EVSS_LOOP
             END IF
@@ -1226,7 +1226,7 @@ CONTAINS
          !
          N_STRS = 0
          COUNT_STRS_LOOP: DO
-            CALL CHECKREAD('STRS',LU_INPUT,IOS)
+            CALL CHECKREAD('STRS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_STRS_LOOP
             END IF
@@ -1243,7 +1243,7 @@ CONTAINS
          !
          N_EDEV = 0
          COUNT_EDEV_LOOP: DO
-            CALL CHECKREAD('EDEV',LU_INPUT,IOS)
+            CALL CHECKREAD('EDEV',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT COUNT_EDEV_LOOP
             END IF
@@ -1628,7 +1628,7 @@ CONTAINS
          !
          ! No read for default values
          IF (N > 0) THEN
-            CALL CHECKREAD('PERS',LU_INPUT,IOS)
+            CALL CHECKREAD('PERS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
             IF (IOS == 1) THEN
                EXIT READ_PERS_LOOP
             END IF
@@ -2219,7 +2219,7 @@ CONTAINS
          WAIT_AT_XYZ        = .FALSE.
          KNOWN_DOOR         = .FALSE.
          !
-         CALL CHECKREAD('EXIT',LU_INPUT,IOS)
+         CALL CHECKREAD('EXIT',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_EXIT_LOOP
          END IF
@@ -2662,7 +2662,7 @@ CONTAINS
          WAIT_AT_XYZ        = .FALSE.
          KNOWN_DOOR         = .FALSE.
          !
-         CALL CHECKREAD('DOOR',LU_INPUT,IOS)
+         CALL CHECKREAD('DOOR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_DOOR_LOOP
          END IF
@@ -3103,7 +3103,7 @@ CONTAINS
          TRAVEL_TIME   = -.1_EB
          MAX_HUMANS_INSIDE = 0
          !
-         CALL CHECKREAD('CORR',LU_INPUT,IOS)
+         CALL CHECKREAD('CORR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_CORR_LOOP
          END IF
@@ -3359,7 +3359,7 @@ CONTAINS
          FAC_V0_DOWN                 = 1.0_EB
          FAC_V0_HORI                 = 1.0_EB
          !
-         CALL CHECKREAD('STRS',LU_INPUT,IOS)
+         CALL CHECKREAD('STRS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_STRS_LOOP
          END IF
@@ -3710,7 +3710,7 @@ CONTAINS
          CROWBAR_INPUT_FILE = 'null'
          !
          !
-         CALL CHECKREAD('ENTR',LU_INPUT,IOS)
+         CALL CHECKREAD('ENTR',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_ENTR_LOOP
          END IF
@@ -4161,7 +4161,7 @@ CONTAINS
          PROP_ID                  = 'null'
          CROWBAR_INPUT_FILE = 'null'
          !
-         CALL CHECKREAD('EVAC',LU_INPUT,IOS)
+         CALL CHECKREAD('EVAC',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_EVAC_LOOP
          END IF
@@ -4511,7 +4511,7 @@ CONTAINS
          PRE_HIGH      = HUGE(PRE_HIGH)
          INPUT_ID      = 'null'
          !
-         CALL CHECKREAD('EDEV',LU_INPUT,IOS)
+         CALL CHECKREAD('EDEV',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_EDEV_LOOP
          END IF
@@ -4608,7 +4608,7 @@ CONTAINS
          SHOW          = .TRUE.
          TIME_FALL_DOWN = -1.0_EB
          !
-         CALL CHECKREAD('EVHO',LU_INPUT,IOS)
+         CALL CHECKREAD('EVHO',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_EVHO_LOOP
          END IF
@@ -4715,7 +4715,7 @@ CONTAINS
          USE_V0        = .FALSE.
          SHOW          = .TRUE.
          !
-         CALL CHECKREAD('EVSS',LU_INPUT,IOS)
+         CALL CHECKREAD('EVSS',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
          IF (IOS == 1) THEN
             EXIT READ_EVSS_LOOP
          END IF
@@ -5400,8 +5400,9 @@ CONTAINS
                    CALL SHUTDOWN(MESSAGE,PROCESS_0_ONLY=.FALSE.) ; RETURN
                 END IF
                 IF (IBAR_TMP /= IBAR .OR. JBAR_TMP /= JBAR .OR. N_TMP < 4 ) THEN
+                   WRITE(MESSAGE,'(A)') 'ERROR: Init Evac Dumps, Restart: Problems to read the FED file'
                    CLOSE (LU_EVACFED)
-                   CALL SHUTDOWN('ERROR: Init Evac Dumps, Restart: Problems to read the FED file') ; RETURN
+                   CALL SHUTDOWN(MESSAGE,PROCESS_0_ONLY=.FALSE.) ; RETURN
                 END IF
                 DO I = 1, IBAR
                    DO J= 1, JBAR
@@ -5468,7 +5469,7 @@ CONTAINS
              I_EVAC = IBCLR(I_EVAC,3)  ! do not read FED
              I_EVAC = IBCLR(I_EVAC,1)  ! do not save FED
           ELSE
-             CALL SHUTDOWN('ERROR: Evac Dumps: FED, no restart yet') ; RETURN
+             CALL SHUTDOWN('ERROR: Evac Dumps: FED, no restart yet',PROCESS_0_ONLY=.FALSE.) ; RETURN
              OPEN (LU_EVACFED,file=FN_EVACFED,form='unformatted', status='old')
              READ (LU_EVACFED,Iostat=ios) n_egrids_tmp
              IF (ios/=0) THEN
@@ -6227,7 +6228,7 @@ CONTAINS
              N_HUMANS = N_HUMANS + 1
              !
              IF (N_HUMANS > N_HUMANS_DIM) THEN
-                CALL SHUTDOWN('ERROR: Init Humans: no re-allocation yet') ; RETURN
+                CALL SHUTDOWN('ERROR: Init Humans: no re-allocation yet',PROCESS_0_ONLY=.FALSE.) ; RETURN
                 CALL RE_ALLOCATE_HUMANS(1,NM)
                 HUMAN=>MESHES(NM)%HUMAN
              END IF
@@ -6964,7 +6965,7 @@ CONTAINS
              END IF
              IF (IBAR_TMP /= IBAR .OR. JBAR_TMP /= JBAR .OR. N_TMP < 4 ) THEN
                 CLOSE (LU_EVACFED)
-                CALL SHUTDOWN('ERROR: Problems to read the FED file') ; RETURN
+                CALL SHUTDOWN('ERROR: Problems to read the FED file',PROCESS_0_ONLY=.FALSE.) ; RETURN
              END IF
 
           END IF
@@ -14163,7 +14164,7 @@ CONTAINS
 
     SELECT CASE(PCP%I_VEL_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Class_Properties: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        HR%Speed  = PCP%V_mean
     CASE(1)   ! Uniform
@@ -14249,13 +14250,13 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        HR%Speed = rnd_vec(1)
     CASE Default
-       CALL SHUTDOWN('ERROR: Class_Properties I_VEL_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties I_VEL_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
     HR%Speed = Max(HR%Speed, 0.0_EB)
     
     SELECT CASE(PCP%I_DIA_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Class_Properties: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        HR%Radius  = 0.5_EB*PCP%D_mean
     CASE(1)   ! Uniform
@@ -14340,14 +14341,14 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        HR%Radius = 0.5_EB*rnd_vec(1)
     CASE Default
-       CALL SHUTDOWN('ERROR: Class_Properties I_DIA_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties I_DIA_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
     HR%Radius = Max(HR%Radius, 0.05_EB) ! 5cm minimum radius
     HR%Mass   = PCP%m_agent*(HR%Radius/0.27_EB)**2
 
     SELECT CASE(PCP%I_TAU_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Class_Properties: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        HR%Tau  = PCP%Tau_mean
     CASE(1)   ! Uniform
@@ -14434,13 +14435,13 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        HR%Tau = rnd_vec(1)
     CASE Default
-       CALL SHUTDOWN('ERROR: Class_Properties I_TAU_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties I_TAU_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
     HR%Tau = Max(HR%Tau, 0.01_EB) ! 0.01s minimum motive force parameter
 
     SELECT CASE(I_DET_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Class_Properties: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        HR%Tdet  = Tdet_mean
     CASE(1)   ! Uniform
@@ -14526,12 +14527,12 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        HR%Tdet = rnd_vec(1)
     CASE Default
-       CALL SHUTDOWN('ERROR: Class_Properties I_DET_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties I_DET_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
 
     SELECT CASE(I_PRE_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Class_Properties: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        HR%Tpre  = MAX(0._EB,Tpre_mean)
     CASE(1)   ! Uniform
@@ -14617,7 +14618,7 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        HR%Tpre = MAX(0._EB,rnd_vec(1))
     CASE Default
-       CALL SHUTDOWN('ERROR: Class_Properties I_PRE_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Class_Properties I_PRE_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
     !
     ! Constants for the 'psychological' potential
@@ -14673,7 +14674,7 @@ CONTAINS
 
     SELECT CASE(I_PRE_DIST)
     CASE(-1)
-       CALL SHUTDOWN('ERROR: Tpre_Generation: -1') ; RETURN
+       CALL SHUTDOWN('ERROR: Tpre_Generation: -1',PROCESS_0_ONLY=.FALSE.) ; RETURN
     CASE(0)
        TPRE_OUT = MAX(0._EB,Tpre_mean)
     CASE(1)   ! Uniform
@@ -14759,7 +14760,7 @@ CONTAINS
        CALL RandomNumbers(n_rnd, n_par, RandomType, RandomPara(1:n_par), rnd_vec)
        TPRE_OUT = MAX(0._EB,rnd_vec(1))
     CASE Default
-       CALL SHUTDOWN('ERROR: Tpre_Generation I_PRE_DIST') ; RETURN
+       CALL SHUTDOWN('ERROR: Tpre_Generation I_PRE_DIST',PROCESS_0_ONLY=.FALSE.) ; RETURN
     END SELECT
   END SUBROUTINE TPRE_GENERATION
 !
@@ -14807,6 +14808,7 @@ CONTAINS
     INTEGER :: NPP,NPLIM,i,izero,nn,n
     LOGICAL :: CROWBAR_DUMP
     REAL(EB) :: TNOW, EVEL, angle_hr
+    REAL(FB) :: PART_MIN, PART_MAX
     REAL(FB), ALLOCATABLE, DIMENSION(:) :: XP,YP,ZP
     REAL(FB), ALLOCATABLE, DIMENSION(:,:) :: QP, AP
     INTEGER, ALLOCATABLE, DIMENSION(:) :: TA
@@ -14976,7 +14978,22 @@ CONTAINS
           WRITE(LU_PART(NM)) ((QP(I,NN),I=1,NPLIM),NN=1,EVAC_N_QUANTITIES)
        END IF
        !
+       WRITE(LU_PART(NM+NMESHES),'(ES13.6,1X,I4)')T, EVAC_N_QUANTITIES
        IF (EVAC_N_QUANTITIES > 0) THEN
+          DO NN = 1, EVAC_N_QUANTITIES
+             IF (NPLIM > 0) THEN
+                PART_MAX = QP(1,NN)
+                PART_MIN = PART_MAX
+                DO I = 2, NPLIM
+                   PART_MIN = MIN(QP(I,NN),PART_MIN)
+                   PART_MAX = MAX(QP(I,NN),PART_MAX)
+                END DO
+             ELSE
+                PART_MIN = 1.0_FB
+                PART_MAX = 0.0_FB
+             ENDIF
+             WRITE(LU_PART(NM+NMESHES),'(5X,ES13.6,1X,ES13.6)')PART_MIN, PART_MAX
+          ENDDO
           DEALLOCATE(QP)
        END IF
        DEALLOCATE(AP)

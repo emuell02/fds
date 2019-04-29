@@ -23,7 +23,8 @@ USE GEOMETRY_FUNCTIONS, ONLY: ASSIGN_PRESSURE_ZONE
 USE MANUFACTURED_SOLUTIONS, ONLY: DIFF_MMS,UF_MMS,WF_MMS,VD2D_MMS_Z_SRC !,RHO_0_MMS,RHO_1_MMS
 USE EVAC, ONLY: EVAC_EMESH_EXITS_TYPE, EMESH_EXITS, EMESH_NFIELDS, N_EXITS, N_CO_EXITS, N_DOORS
 USE COMPLEX_GEOMETRY, ONLY : SET_EXIMDIFFLX_3D,SET_DOMAINDIFFLX_3D,SET_EXIMRHOHSLIM_3D,SET_EXIMRHOZZLIM_3D,&
-                             IBM_CGSC,IBM_SOLID,CCREGION_DIVERGENCE_PART_1,CFACE_PREDICT_NORMAL_VELOCITY
+                             IBM_CGSC, IBM_IDCC, IBM_SOLID, IBM_CUTCFE, &
+                             CCREGION_DIVERGENCE_PART_1,CFACE_PREDICT_NORMAL_VELOCITY
 
 ! Compute contributions to the divergence term
 
@@ -37,11 +38,11 @@ REAL(EB), POINTER, DIMENSION(:,:) :: PBAR_P
 REAL(EB) :: DELKDELT,VC,VC1,DTDX,DTDY,DTDZ,TNOW, &
             DZDX,DZDY,DZDZ,RDT,RHO_D_DZDN,TSI,TIME_RAMP_FACTOR,DELTA_P,PRES_RAMP_FACTOR,&
             TMP_G,DIV_DIFF_HEAT_FLUX,H_S,ZZZ(1:4),DU,DU_P,DU_M,UN,PROFILE_FACTOR, &
-            XHAT,ZHAT,TT,Q_Z,D_Z_TEMP,D_Z_N(0:5000),RHO_D_DZDN_GET(1:N_TRACKED_SPECIES),JCOR,UN_P,TMP_F_GAS
+            XHAT,ZHAT,TT,Q_Z,D_Z_TEMP,D_Z_N(0:5000),RHO_D_DZDN_GET(1:N_TRACKED_SPECIES),JCOR,UN_P,TMP_F_GAS,R_PFCT
 REAL(EB), ALLOCATABLE, DIMENSION(:) :: ZZ_GET
 TYPE(SURFACE_TYPE), POINTER :: SF
 TYPE(SPECIES_MIXTURE_TYPE), POINTER :: SM
-INTEGER :: IW,N,IOR,II,JJ,KK,IIG,JJG,KKG,I,J,K,IPZ,IOPZ,N_ZZ_MAX
+INTEGER :: IW,N,IOR,II,JJ,KK,IIG,JJG,KKG,I,J,K,IPZ,IOPZ,N_ZZ_MAX,ICC
 TYPE(VENTS_TYPE), POINTER :: VT=>NULL()
 TYPE(WALL_TYPE), POINTER :: WC=>NULL()
 
@@ -108,12 +109,25 @@ SPECIES_GT_1_IF: IF (N_TOTAL_SCALARS>1) THEN
 
    DEL_RHO_D_DEL_Z = 0._EB
    RHO_D => WORK4
-   IF (SIM_MODE/=DNS_MODE) THEN
-      IF (SIM_MODE==LES_MODE) THEN
-         RHO_D_TURB => WORK9
-         RHO_D_TURB = MAX(0._EB,MU-MU_DNS)*RSC
-      ELSE
-         RHO_D = MU*RSC
+   IF (.NOT.POTENTIAL_TEMPERATURE_CORRECTION) THEN
+      ! default
+      IF (SIM_MODE/=DNS_MODE) THEN
+         IF (SIM_MODE==LES_MODE) THEN
+            RHO_D_TURB => WORK9
+            RHO_D_TURB = MAX(0._EB,MU-MU_DNS)*RSC
+         ELSE
+            RHO_D = MAX(0._EB,MU)*RSC
+         ENDIF
+      ENDIF
+   ELSE
+      ! dynamic turbulent Schmidt number (Deardorff, 1980)
+      IF (SIM_MODE/=DNS_MODE) THEN
+         IF (SIM_MODE==LES_MODE) THEN
+            RHO_D_TURB => WORK9
+            RHO_D_TURB = MAX(0._EB,MU-MU_DNS)/PR_T
+         ELSE
+            RHO_D = MAX(0._EB,MU)/PR_T
+         ENDIF
       ENDIF
    ENDIF
 
@@ -426,10 +440,20 @@ K_DNS_OR_LES: IF (SIM_MODE==DNS_MODE .OR. SIM_MODE==LES_MODE) THEN
    DEALLOCATE(ZZ_GET)
 
    IF (SIM_MODE==LES_MODE) THEN
-      IF(.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
-         KP = KP + MAX(0._EB,(MU-MU_DNS))*CP*RPR
+      IF (.NOT.POTENTIAL_TEMPERATURE_CORRECTION) THEN
+         ! normal LES mode, constant turbulent Prandtl number
+         IF(.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
+            KP = KP + MAX(0._EB,(MU-MU_DNS))*CP*RPR
+         ELSE
+            KP = KP + MAX(0._EB,(MU-MU_DNS))*CPOPR
+         ENDIF
       ELSE
-         KP = KP + MAX(0._EB,(MU-MU_DNS))*CPOPR
+         ! dynamic turbulent Prandtl number (Deardorff, 1980)
+         IF(.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
+            KP = KP + MAX(0._EB,(MU-MU_DNS))*CP/PR_T
+         ELSE
+            KP = KP + MAX(0._EB,(MU-MU_DNS))*CPOPR*PR/PR_T
+         ENDIF
       ENDIF
    ENDIF
 
@@ -446,7 +470,11 @@ K_DNS_OR_LES: IF (SIM_MODE==DNS_MODE .OR. SIM_MODE==LES_MODE) THEN
 
 ELSE K_DNS_OR_LES
 
+   ! normal VLES mode
    KP = MU*CPOPR
+
+   ! dynamic turbulent Prandtl number (Deardorff, 1980)
+   IF (POTENTIAL_TEMPERATURE_CORRECTION)  KP = KP*PR/PR_T
 
 ENDIF K_DNS_OR_LES
 
@@ -710,6 +738,7 @@ IF_PRESSURE_ZONES: IF (N_ZONE>0) THEN
 
    IF (EVACUATION_ONLY(NM)) RTRM=1._EB
 
+   R_PFCT = 1._EB
    DO K=1,KBAR
       DO J=1,JBAR
          VC1 = DY(J)*DZ(K)
@@ -718,12 +747,18 @@ IF_PRESSURE_ZONES: IF (N_ZONE>0) THEN
             IPZ = PRESSURE_ZONE(I,J,K)
             IF (IPZ<1) CYCLE
             IF (SOLID(CELL_INDEX(I,J,K))) CYCLE
-            IF (CC_IBM) THEN
-               IF (CCVAR(I,J,K,IBM_CGSC) == IBM_SOLID) CYCLE
-            ENDIF
             VC = DX(I)*RC(I)*VC1
+            IF (CC_IBM) THEN
+               R_PFCT = 1._EB
+               IF (CCVAR(I,J,K,IBM_CGSC) == IBM_SOLID) THEN
+                  CYCLE
+               ELSEIF(CCVAR(I,J,K,IBM_CGSC) == IBM_CUTCFE) THEN
+                  ICC=CCVAR(I,J,K,IBM_IDCC)
+                  R_PFCT = SUM(CUT_CELL(ICC)%VOLUME(1:CUT_CELL(ICC)%NCELL)) / VC
+               ENDIF
+            ENDIF
             DSUM(IPZ,NM) = DSUM(IPZ,NM) + VC*DP(I,J,K)
-            PSUM(IPZ,NM) = PSUM(IPZ,NM) + VC*(R_PBAR(K,IPZ)-RTRM(I,J,K))
+            PSUM(IPZ,NM) = PSUM(IPZ,NM) + VC*(R_PBAR(K,IPZ)*R_PFCT-RTRM(I,J,K))
          ENDDO
       ENDDO
    ENDDO
@@ -1343,7 +1378,7 @@ PREDICT_NORMALS: IF (PREDICTOR) THEN
 
 ELSE PREDICT_NORMALS
 
-   ! In the CORRECTOR step, the normal component of velocity, U_NORMAL, is the same as the predicted value, U_NORMAL_S. 
+   ! In the CORRECTOR step, the normal component of velocity, U_NORMAL, is the same as the predicted value, U_NORMAL_S.
    ! However, for species mass fluxes and HVAC, U_NORMAL is computed elsewhere (wall.f90).
 
    DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
@@ -1477,17 +1512,17 @@ SUBROUTINE DIVERGENCE_PART_2(DT,NM)
 ! Finish computing the divergence of the flow, D, and then compute its time derivative, DDDT
 
 USE COMP_FUNCTIONS, ONLY: CURRENT_TIME
-USE COMPLEX_GEOMETRY, ONLY : IBM_CGSC, IBM_SOLID
+USE COMPLEX_GEOMETRY, ONLY : IBM_CGSC, IBM_IDCC, IBM_SOLID, IBM_CUTCFE
 
 INTEGER, INTENT(IN) :: NM
 REAL(EB), INTENT(IN) :: DT
 REAL(EB), POINTER, DIMENSION(:,:,:) :: DP,D_NEW,RTRM,DIV
 REAL(EB) :: USUM_ADD(N_ZONE),UN_P
-REAL(EB) :: RDT,TNOW,P_EQ,SUM_P_PSUM,SUM_USUM,SUM_DSUM,SUM_PSUM
+REAL(EB) :: RDT,TNOW,P_EQ,SUM_P_PSUM,SUM_USUM,SUM_DSUM,SUM_PSUM,R_PFCT
 LOGICAL :: OPEN_ZONE
 REAL(EB), POINTER, DIMENSION(:) :: D_PBAR_DT_P
 REAL(EB), POINTER, DIMENSION(:,:) :: PBAR_P
-INTEGER :: IW,IOR,II,JJ,KK,IIG,JJG,KKG,IC,I,J,K,IPZ,IOPZ
+INTEGER :: IW,IOR,II,JJ,KK,IIG,JJG,KKG,IC,I,J,K,IPZ,IOPZ,ICC
 TYPE(WALL_TYPE), POINTER :: WC=>NULL()
 
 IF (SOLID_PHASE_ONLY) RETURN
@@ -1566,13 +1601,23 @@ IF_PRESSURE_ZONES: IF (N_ZONE>0) THEN
 
    ! Add pressure derivative to divergence
 
+   R_PFCT = 1._EB
    DO K=1,KBAR
       DO J=1,JBAR
          DO I=1,IBAR
             IPZ = PRESSURE_ZONE(I,J,K)
             IF (IPZ<1) CYCLE
             IF (SOLID(CELL_INDEX(I,J,K))) CYCLE
-            DP(I,J,K) = DP(I,J,K) - (R_PBAR(K,IPZ)-RTRM(I,J,K))*D_PBAR_DT_P(IPZ)
+            IF (CC_IBM) THEN
+               R_PFCT = 1._EB
+               IF (CCVAR(I,J,K,IBM_CGSC) == IBM_SOLID) THEN
+                  CYCLE
+               ELSEIF(CCVAR(I,J,K,IBM_CGSC) == IBM_CUTCFE) THEN
+                  ICC=CCVAR(I,J,K,IBM_IDCC)
+                  R_PFCT = SUM(CUT_CELL(ICC)%VOLUME(1:CUT_CELL(ICC)%NCELL)) / (DX(I)*RC(I)*DY(J)*DZ(K))
+               ENDIF
+            ENDIF
+            DP(I,J,K) = DP(I,J,K) - (R_PBAR(K,IPZ)*R_PFCT-RTRM(I,J,K))*D_PBAR_DT_P(IPZ)
          ENDDO
       ENDDO
    ENDDO

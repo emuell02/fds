@@ -37,6 +37,7 @@ PROCESS()
 
 PROCESS Arup_Tunnel
 PROCESS ATF_Corridors
+PROCESS Atmospheric_Dispersion
 PROCESS Backward_Facing_Step
 PROCESS Beyler_Hood
 PROCESS Bittern_Sprinkler_Experiments
@@ -51,6 +52,7 @@ PROCESS DelCo_Trainers
 PROCESS FAA_Cargo_Compartments
 PROCESS FAA_Polymers
 PROCESS Fleury_Heat_Flux
+PROCESS FM_Burner
 PROCESS FM_FPRF_Datacenter
 PROCESS FM_Parallel_Panels
 PROCESS FM_SNL

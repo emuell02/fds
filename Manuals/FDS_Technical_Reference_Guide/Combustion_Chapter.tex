@@ -377,38 +377,36 @@ Beyler's chapter of the SFPE Handbook~\cite{SFPE:Beyler} includes $X_{\OI}$ and 
 \subsection{Extinction Based Mainly on Oxygen Concentration}
 \label{o2_based_model}
 
-The first of two optional extinction models (referred to as {\ct 'EXTINCTION 1'} in the FDS input file) linearizes Eq.~(\ref{YO2eq}) to form a limiting oxygen mass fraction that is a piecewise-linear function of the cell bulk temperature, $T_{ijk}$:
+The first of two optional extinction models (referred to as {\ct 'EXTINCTION 1'} in the FDS input file) linearizes Eq.~(\ref{YO2eq}) to form a limiting oxygen concentration\footnote{The extinction model is written in terms of the oxygen {\em volume} fraction, $X_\OTWO$, because usually experimental results are reported as such. However, within the numerical algorithm, all values are converted into mass fraction, $Y_\OTWO$.} that is a piecewise-linear function of the cell bulk temperature, $T_{ijk}$ (see Fig.~\ref{extinction_1_sketch}):
 \be
-   Y_{\OTWO,\lim}(T_{ijk}) = \left\{ \begin{array}{c@{\quad \quad}l} Y_{\OI} \, \left( \frac{T_{\OI}-T_{ijk}}{T_{\OI}-T_\infty} \right) & T_{ijk}<T_{\rm cut} \\[.1in]  0 &  T_{ijk} \ge T_{\rm cut} \end{array} \right.  \label{extinction_model}
+   X_{\OTWO,\lim}(T_{ijk}) = \left\{ \begin{array}{c@{\quad \quad}l} X_{\OI} \, \left( \frac{T_{\OI}-T_{ijk}}{T_{\OI}-T_\infty} \right) & T_{ijk}<T_{\rm fb} \\[.1in]  0 &  T_{ijk} \ge T_{\rm fb} \end{array} \right.  \label{extinction_model}
 \ee
-If $Y_{\OTWO,ijk}<Y_{\OTWO,\lim}$, local extinction is assumed and $\dot{m}_\alpha'''=0$ and $\dot{q}'''=0$ for that grid cell at that time step. For a control volume at a temperature of \SI{300}{K}, i.e., near room temperature, the limiting oxygen mass fraction is approximately 0.14.  This value is consistent with the measurements of Morehart et al.~\cite{Morehart:1991}, who measured the oxygen concentration near self-extinguishing flames. They found that flames self-extinguished at oxygen concentrations of 12.4~\% to 14.3~\%. Note that their results are expressed as volume, not mass, fractions. Beyler's chapter in the SFPE Handbook references other researchers who measured oxygen concentrations at extinction ranging from 12~\% to 15~\%.
+\begin{figure}
+\centering
+\includegraphics[width=4.5in]{FIGURES/extinction_1_sketch}
+\vskip-.2cm
+\caption{Extinction criteria for the {\ct 'EXTINCTION 1'} model.}
+\label{extinction_1_sketch}
+\end{figure}
+If $X_{\OTWO,ijk}<X_{\OTWO,\lim}$, local extinction is assumed and $\dot{m}_\alpha'''=0$ and $\dot{q}'''=0$ for that grid cell at that time step. At an ambient temperature of 20~$^\circ$C, the default limiting oxygen volume fraction is 0.135.  This value is consistent with the measurements of Morehart et al.~\cite{Morehart:1991}, who measured the oxygen concentration near self-extinguishing flames. They found that flames self-extinguished at oxygen volume fractions of 12.4~\% to 14.3~\%. Note that their results are expressed as volume, not mass, fractions. Beyler's chapter in the SFPE Handbook references other researchers who measured oxygen concentrations at extinction ranging from 12~\% to 15~\%.
 
-The cut-off temperature, $T_{\rm cut}$, in Eq.~(\ref{extinction_model}) is needed for simulations in which the characteristic grid cell size, $\dx$, is much larger than 1~cm. In such cases, the combustion occurs within a fraction of the grid cell and its energy cannot raise the cell bulk temperature to the critical value. This cut-off temperature is a weighted average of the critical flame temperature, $T_{\OI}$, and 600~$^\circ$C, a temperature at which unburned fuel and oxygen within the hot gas layer of a compartment mix and burn:
-\be
-   T_{\rm cut} = f \, T_{\OI} + ( 1 - f ) \, 873 \; \mathrm{K} \quad ; \quad f = \frac{\min(1 \; \mathrm{cm},\dx)}{\dx}
-\ee
-Measurements of Pitts~\cite{Pitts:1995}, Bundy~\cite{Bundy:1}, and others, have shown that the upper layer oxygen concentration drops to zero in flashover compartment fire experiments when the temperature increases above approximately 600~$^\circ$C.
+The {\ct 'EXTINCTION 1'} model is intended for relatively coarse fire simulations where the grid cell cannot resolve details of the flame structure or capture flame temperatures. The ``free-burn'' temperature, $T_{\rm fb}$, in Eq.~(\ref{extinction_model}) is needed for simulations in which the characteristic grid cell size, $\dx$, is much larger than 1~cm. In such cases, the combustion occurs within a fraction of the grid cell and its energy cannot raise the cell bulk temperature to the critical value. Its default value is 600~$^\circ$C. Measurements of Pitts~\cite{Pitts:1995}, Bundy~\cite{Bundy:1}, and others, have shown that the upper layer oxygen concentration drops to zero in flashover compartment fire experiments when the temperature increases above approximately 600~$^\circ$C.
 
-There is a second constraint on the reaction in this simple model; that is, extinction is assumed if
-\be
-   \dot{q}_{ijk}''' < \frac{20}{(\dx \, \dy \, \dz)^{1/3}}\, \left( \frac{T_{\OI}-T_{ijk}}{T_{\OI}-T_\infty} \right) \; \frac{\mathrm{kW}}{\mathrm{m}^3}
-\ee
-where $\dot{q}_{ijk}'''$ is the potential heat release rate per unit volume in the grid cell of volume $\dx \, \dy \, \dz$. The value of 20~kW/m$^2$ has not been rigorously evaluated. It merely prevents spurious combustion of diluted fuel gas that finds pockets of oxygen in an otherwise oxygen-limited environment. The temperature-dependent function on the right hand side of the inequality is the same linear function as that in Eq.~(\ref{extinction_model}). This function ensures that both fuel and oxygen can be totally consumed in a hot gas layer during flashover.
 
 \subsection{Extinction Based on Both Fuel and Oxygen}
 
-The second optional extinction model in FDS, referred to as {\ct 'EXTINCTION 2'}, is intended for simulations where the grid cell size is on the order of 1~cm or less. The model considers both the oxygen and the fuel content of a given grid cell at the start of a time step. If the potential heat release from the reactants cannot raise the temperature of the cell above the empirically determined critical flame temperature, $T_{\rm CFT}$, combustion is suppressed.  Consider the simple reaction $\mbox{Fuel} + \mbox{Air} \rightarrow \mbox{Products}$. The mass fractions of lumped species Fuel, Air, and Products in the cell at the beginning and the end of the time step are $[Z_{\rm F}^0, Z_{\rm A}^0, Z_{\rm P}^0]$ and $[Z_{\rm F}, Z_{\rm A}, Z_{\rm P}]$, respectively. The Products include the products of combustion as well as diluents like argon or water vapor from droplet evaporation. Define a modified form of the equivalence ratio:
+The second optional extinction model in FDS, referred to as {\ct 'EXTINCTION 2'}, considers both the oxygen and the fuel content of a given grid cell at the start of a time step. If the potential heat release from the reactants cannot raise the temperature of the cell above the empirically determined critical flame temperature, $T_{\rm CFT}$, combustion is suppressed.  Consider the simple reaction $\mbox{Fuel} + \mbox{Air} \rightarrow \mbox{Products}$. The mass fractions of lumped species Fuel, Air, and Products in the mixed portion of the grid cell at the beginning and the end of the reaction part of the time step are $[Z_{\rm F}^0, Z_{\rm A}^0, Z_{\rm P}^0]$ and $[Z_{\rm F}, Z_{\rm A}, Z_{\rm P}]$, respectively. The Products include the products of combustion as well as diluents like argon or water vapor from droplet evaporation. Define a modified form of the equivalence ratio:
 \be
    \label{eq:dza}
    \tilde{\phi} \equiv  \min \left( \, 1 \, , \, \frac{s \, Z_{\rm F}^0}{Z_{\rm A}^0} \, \right) = \frac{Z_{\rm A}^0-Z_{\rm A}}{Z_{\rm A}^0}
 \ee
-where $s$ is the mass stoichiometric coefficient for Air (mass of Air required per mass of Fuel consumed). The extinction criterion is given by:
-\begin{align}
+where $s$ is the mass stoichiometric coefficient for Air (mass of Air required per mass of Fuel consumed). The extinction criterion assumes that excess fuel acts as a diluent, but excess air and a proportional amount of products do \emph{not}. Hence, a large computational cell that is mostly air with a small amount of fuel is likely to burn, whereas a cell that is mostly fuel with little air will not. To achieve this, a fraction of the total mass of the grid cell equal to $(1-\tilde{\phi}) (Z_{\rm A}^0+Z_{\rm P}^0)$ has been removed from the calculation of the enthalpy. With this amount of mass removed, the extinction criterion is given by:
+\begin{equation}
 \label{eq:extinction}
 Z_{\rm F}^0 \, h_{\rm F}(T) + \tilde{\phi} \, Z_{\rm A}^0 \, h_{\rm A}(T) + \tilde{\phi} \, Z_{\rm P}^0 \, h_{\rm P}(T) <
-Z_{\rm F} \, h_{\rm F}(T_{\rm CFT}) + \left[ (\tilde{\phi}-1) \, Z_{\rm P}^0 + Z_{\rm P} \right] \, h_{\rm P}(T_{\rm CFT})
-\end{align}
-where $T$ is the pre-reaction mean cell temperature and $T_{\rm CFT}$ is the critical flame temperature. Note that $h_\alpha(T)$ represents the chemical plus sensible enthalpy; thus, the left-hand-side includes the combustion heat release.  If the inequality (\ref{eq:extinction}) holds, combustion is suppressed---the combustion heat release is not sufficient to raise the product mixture above its critical flame temperature. The extinction criterion assumes that excess fuel acts as a diluent, but excess air and a proportional amount of products do \emph{not}. Hence, a large computational cell which is mostly air with a small amount of fuel is likely to burn, whereas a cell which is mostly fuel with little air will not. To achieve this, a fraction of the total mass of the grid cell equal to $(1-\tilde{\phi}) (Z_{\rm A}^0+Z_{\rm P}^0)$ has been removed from the calculation of the enthalpy of the left and right hand sides of the inequality (\ref{eq:extinction}).
+Z_{\rm F} \, h_{\rm F}(T_{\rm CFT}) + \left[ Z_{\rm P} - (1-\tilde{\phi}) \, Z_{\rm P}^0 \right] \, h_{\rm P}(T_{\rm CFT})
+\end{equation}
+where $T$ is the pre-reaction mean cell temperature and $T_{\rm CFT}$ is the critical flame temperature. Note that $h_\alpha(T)$ represents the chemical plus sensible enthalpy; thus, the left-hand-side includes the combustion heat release.  If the inequality, (\ref{eq:extinction}), holds, combustion is suppressed---the combustion heat release is not sufficient to raise the product mixture above its critical flame temperature. Notice that the right-hand side of the inequality contains no air because all excess air has been removed from consideration. In other words, for an infinitely fast reaction, $Z_{\rm A}-(1-\tilde{\phi}) Z_{\rm A}^0 \equiv 0$.
 
 This extinction model can be applied to multiple reaction schemes. The critical flame temperature criterion is applied to the entire reaction. In other words, the individual reactions are allowed to occur, and the enthalpy inequality (\ref{eq:extinction}) is applied to the initial and final species mass fractions. If insufficient energy has been released, all reactions are suppressed and the species mass fractions are returned to their original values at the start of the time step.
 
