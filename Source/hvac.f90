@@ -60,7 +60,7 @@ N_HVAC_READ = 0
 
 REWIND(LU_INPUT) ; INPUT_FILE_LINE_NUMBER = 0
 COUNT_HVAC_LOOP: DO
-   CALL CHECKREAD('HVAC',LU_INPUT,IOS)
+   CALL CHECKREAD('HVAC',LU_INPUT,IOS)  ; IF (STOP_STATUS==SETUP_STOP) RETURN
    IF (IOS==1) EXIT COUNT_HVAC_LOOP
    READ(LU_INPUT,HVAC,END=15,ERR=16,IOSTAT=IOS)
    N_HVAC_READ = N_HVAC_READ + 1
@@ -592,6 +592,7 @@ USE PHYSICAL_FUNCTIONS, ONLY: GET_ENTHALPY
 !INTEGER :: I1,I2,J1,J2,K1,K2,IOR
 INTEGER :: N,ND,ND2,NM,NN,NF,NV
 REAL(EB) :: TNOW,ZZ_GET(1:N_TRACKED_SPECIES)
+LOGICAL :: FOUND
 TYPE (LAGRANGIAN_PARTICLE_CLASS_TYPE),DIMENSION(:), POINTER:: TEMPALLOC=>NULL()
 TYPE(DUCTNODE_TYPE), POINTER :: DN=>NULL()
 TYPE(DUCT_TYPE), POINTER :: DU=>NULL()
@@ -617,17 +618,45 @@ DUCT_LOOP: DO ND = 1, N_DUCTS
          CALL SHUTDOWN(MESSAGE); RETURN
       ENDIF
    ENDDO
-   DO NN = 1, N_DUCTNODES
-      IF(TRIM(DUCTNODE(NN)%ID) == TRIM(DUCT_NODE_A(ND,1))) DU%NODE_INDEX(1) = NN
-      IF(TRIM(DUCTNODE(NN)%ID) == TRIM(DUCT_NODE_A(ND,2))) DU%NODE_INDEX(2) = NN
-      IF (DU%NODE_INDEX(1) > 0 .AND. DU%NODE_INDEX(2) > 0) EXIT
-   ENDDO
+   NODELOOP_D: DO NN = 1, N_DUCTNODES
+      IF(TRIM(DUCTNODE(NN)%ID) == TRIM(DUCT_NODE_A(ND,1))) THEN
+         DU%NODE_INDEX(1) = NN
+         FOUND = .FALSE.
+         DN1_NAME: DO N=1,DUCTNODE(NN)%N_DUCTS
+            IF (TRIM(DU%ID)==TRIM(NODE_DUCT_A(NN,N))) THEN
+               FOUND = .TRUE.
+               EXIT DN1_NAME
+            ENDIF
+         ENDDO DN1_NAME
+         IF (.NOT. FOUND) THEN
+            WRITE(MESSAGE,'(A,A,A,A,A)') 'ERROR: Duct: ',TRIM(DU%ID),'. Node:',&
+                                      TRIM(DUCTNODE(NN)%ID),' does not contain the duct in its list of ducts.'
+            CALL SHUTDOWN(MESSAGE); RETURN
+         ENDIF
+      ENDIF
+      IF(TRIM(DUCTNODE(NN)%ID) == TRIM(DUCT_NODE_A(ND,2))) THEN
+         DU%NODE_INDEX(2) = NN
+         FOUND = .FALSE.
+         DN2_NAME: DO N=1,DUCTNODE(NN)%N_DUCTS
+            IF (TRIM(DU%ID)==TRIM(NODE_DUCT_A(NN,N))) THEN
+               FOUND = .TRUE.
+               EXIT DN2_NAME
+            ENDIF
+         ENDDO DN2_NAME
+         IF (.NOT. FOUND) THEN
+            WRITE(MESSAGE,'(A,A,A,A,A)') 'ERROR: Duct: ',TRIM(DU%ID),'. Node:',&
+                                      TRIM(DUCTNODE(NN)%ID),' does not contain the duct in its list of ducts.'
+            CALL SHUTDOWN(MESSAGE); RETURN
+         ENDIF
+      ENDIF
+      IF (DU%NODE_INDEX(1) > 0 .AND. DU%NODE_INDEX(2) > 0) EXIT NODELOOP_D
+   ENDDO NODELOOP_D
    IF (DU%NODE_INDEX(1) <= 0) THEN
-      WRITE(MESSAGE,'(A,I3,A,A)') 'ERROR: Duct node 1 not located. Duct:',ND,', Duct ID:',TRIM(DU%ID)
+      WRITE(MESSAGE,'(A,I3,A,A)') 'ERROR: First ductnode not located for duct:',ND,', Duct ID:',TRIM(DU%ID)
       CALL SHUTDOWN(MESSAGE); RETURN
    ENDIF
    IF (DU%NODE_INDEX(2) <= 0) THEN
-      WRITE(MESSAGE,'(A,I3,A,A)') 'ERROR: Duct node 2 not located. Duct:',ND,', Duct ID:',TRIM(DU%ID)
+      WRITE(MESSAGE,'(A,I3,A,A)') 'ERROR: Second ductnode not located for duct:',ND,', Duct ID:',TRIM(DU%ID)
       CALL SHUTDOWN(MESSAGE); RETURN
    ENDIF
    IF (DUCT_FAN_A(ND)/='null') THEN
@@ -717,10 +746,12 @@ NODE_LOOP: DO NN = 1, N_DUCTNODES
    IF (DN%VENT_ID /= 'null') THEN
       ALLOCATE(DN%IN_MESH(NMESHES))
       DN%IN_MESH=.FALSE.
+      FOUND = .FALSE.
       MESH_LOOP: DO NM = 1, NMESHES
          IF (EVACUATION_ONLY(NM)) CYCLE
          NODE_VENT_LOOP:DO NV = 1, MESHES(NM)%N_VENT
             IF(MESHES(NM)%VENTS(NV)%ID == DN%VENT_ID) THEN
+               FOUND = .TRUE.
                IF (DN%MESH_INDEX > 0) THEN
                   WRITE(MESSAGE,'(A,A)') 'ERROR: VENT for ductnode is split over more than one mesh for VENT ID:',&
                                           TRIM(MESHES(NM)%VENTS(NV)%ID)
@@ -751,6 +782,10 @@ NODE_LOOP: DO NN = 1, N_DUCTNODES
             ENDIF
          ENDDO NODE_VENT_LOOP
       ENDDO MESH_LOOP
+      IF (.NOT. FOUND) THEN
+         WRITE(MESSAGE,'(A,A,A,A)') 'Cannot find VENT_ID: ',TRIM(DN%VENT_ID),' for Ductnode: ',TRIM(DN%ID)
+         CALL SHUTDOWN(MESSAGE); RETURN
+      ENDIF
    ENDIF
    IF (DN%VENT .AND. DN%AMBIENT) THEN
       WRITE(MESSAGE,'(A,I5,A,A)') 'ERROR: DUCTNODE cannot be AMBIENT and have an assigned VENT_ID. Ductnode:',NN,&
@@ -784,6 +819,11 @@ NODE_LOOP: DO NN = 1, N_DUCTNODES
       ENDDO
       IF (DN%DUCT_INDEX(ND)==-1) THEN
          WRITE(MESSAGE,'(A,I5,A,I5,A,A)') 'ERROR: DUCT ',ND,' not found. Ductnode:',NN,', Ductnode ID:',TRIM(DN%ID)
+         CALL SHUTDOWN(MESSAGE); RETURN
+      ENDIF
+      IF (TRIM(DN%ID) /= TRIM(DUCT_NODE_A(DN%DUCT_INDEX(ND),1)) .AND. TRIM(DN%ID) /= TRIM(DUCT_NODE_A(DN%DUCT_INDEX(ND),2))) THEN
+         WRITE(MESSAGE,'(A,A,A,A,A)') 'ERROR: Duct: ',TRIM(DUCT(DN%DUCT_INDEX(ND))%ID),' does not contain Ductnode:',&
+                                       TRIM(DN%ID), 'in its list of ductnodes.'
          CALL SHUTDOWN(MESSAGE); RETURN
       ENDIF
    ENDDO
@@ -1758,33 +1798,33 @@ WALL_LOOP: DO IW = 1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
             CASE (1)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)-RHO(II,JJ,KK) * &
-                                          0.5_EB*(UP(II-1,JJ,KK)+WC%ONE_D%UW)**2 * &
-                                          SIGN(1._EB,UP(II-1,JJ,KK)+WC%ONE_D%UW))* AREA
+                                          0.5_EB*(UP(II-1,JJ,KK)+WC%ONE_D%U_NORMAL)**2 * &
+                                          SIGN(1._EB,UP(II-1,JJ,KK)+WC%ONE_D%U_NORMAL))* AREA
             CASE(-1)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)+RHO(II,JJ,KK) * &
-                                          0.5_EB*(UP(II,JJ,KK)-WC%ONE_D%UW)**2  * &
-                                          SIGN(1._EB,UP(II,JJ,KK)-WC%ONE_D%UW))*AREA
+                                          0.5_EB*(UP(II,JJ,KK)-WC%ONE_D%U_NORMAL)**2  * &
+                                          SIGN(1._EB,UP(II,JJ,KK)-WC%ONE_D%U_NORMAL))*AREA
             CASE (2)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)-RHO(II,JJ,KK) * &
-                                          0.5_EB*(VP(II,JJ-1,KK)+WC%ONE_D%UW)**2 * &
-                                          SIGN(1._EB,VP(II,JJ-1,KK)+WC%ONE_D%UW))*AREA
+                                          0.5_EB*(VP(II,JJ-1,KK)+WC%ONE_D%U_NORMAL)**2 * &
+                                          SIGN(1._EB,VP(II,JJ-1,KK)+WC%ONE_D%U_NORMAL))*AREA
             CASE(-2)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)+RHO(II,JJ,KK) * &
-                                          0.5_EB*(VP(II,JJ,KK)-WC%ONE_D%UW)**2 * &
-                                          SIGN(1._EB,VP(II,JJ,KK)-WC%ONE_D%UW))*AREA
+                                          0.5_EB*(VP(II,JJ,KK)-WC%ONE_D%U_NORMAL)**2 * &
+                                          SIGN(1._EB,VP(II,JJ,KK)-WC%ONE_D%U_NORMAL))*AREA
             CASE (3)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)-RHO(II,JJ,KK) * &
-                                          0.5_EB*(WP(II,JJ,KK-1)+WC%ONE_D%UW)**2 * &
-                                          SIGN(1._EB,WP(II,JJ,KK-1)+WC%ONE_D%UW))*AREA
+                                          0.5_EB*(WP(II,JJ,KK-1)+WC%ONE_D%U_NORMAL)**2 * &
+                                          SIGN(1._EB,WP(II,JJ,KK-1)+WC%ONE_D%U_NORMAL))*AREA
             CASE (-3)
                NODE_P(WC%NODE_INDEX,NM) = NODE_P(WC%NODE_INDEX,NM) + &
                                           (PBARP(KK,WC%ONE_D%PRESSURE_ZONE)+RHO(II,JJ,KK) * &
-                                          0.5_EB*(WP(II,JJ,KK)-WC%ONE_D%UW)**2 * &
-                                          SIGN(1._EB,WP(II,JJ,KK)-WC%ONE_D%UW))*AREA
+                                          0.5_EB*(WP(II,JJ,KK)-WC%ONE_D%U_NORMAL)**2 * &
+                                          SIGN(1._EB,WP(II,JJ,KK)-WC%ONE_D%U_NORMAL))*AREA
          END SELECT
       ENDIF
    ELSE ZONE_LEAK_IF
