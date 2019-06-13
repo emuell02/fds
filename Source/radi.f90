@@ -892,10 +892,6 @@ BAND_LOOP: DO IBND = 1,NUMBER_SPECTRAL_BANDS
             ENDDO
          ENDDO
 
-         ! Turbulence-Radiation Interaction (TRI) model (under construction)
-
-         IF (TRI_MODEL) KFST4_GAS = KFST4_GAS * TRI_COR
-
          ! Correct the source term in the RTE based on user-specified RADIATIVE_FRACTION on REAC
 
          DO K=1,KBAR
@@ -923,6 +919,10 @@ BAND_LOOP: DO IBND = 1,NUMBER_SPECTRAL_BANDS
       ENDIF RTE_SOURCE_CORRECTION_IF
 
    ENDIF WIDE_BAND_MODEL_IF
+
+   ! Turbulence-Radiation Interaction (TRI) model (under construction)
+
+   IF (TRI_MODEL) KFST4_GAS = KFST4_GAS * TRI_COR(:,:,:,IBND)
 
    ! Calculate extinction coefficient
 
@@ -1016,7 +1016,7 @@ BAND_LOOP: DO IBND = 1,NUMBER_SPECTRAL_BANDS
 
             ! Boundary conditions: Intensities leaving the boundaries.
 
-            !$OMP PARALLEL DO PRIVATE(IOR, II, JJ, KK, LL, NOM) SCHEDULE(GUIDED)
+            !$OMP PARALLEL DO PRIVATE(IOR, II, JJ, KK, LL, NOM, VT) SCHEDULE(GUIDED)
             WALL_LOOP1: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
                IF (WALL(IW)%BOUNDARY_TYPE==NULL_BOUNDARY) CYCLE WALL_LOOP1
                IOR = WALL(IW)%ONE_D%IOR
@@ -1458,7 +1458,8 @@ IF (UPDATE_INTENSITY) THEN
 
 ENDIF
 
-! Save source term for the energy equation (QR = -DIV Q). Done only in one-band (gray gas) case.
+! Save source term for the energy equation (QR = -DIV Q) for the one-band (gray gas) case.
+! QR for wide-band model is saved elsewhere.
 
 IF (.NOT. WIDE_BAND_MODEL) THEN
    QR = KAPPA_GAS*UII - KFST4_GAS
