@@ -2706,7 +2706,7 @@ PYROLYSIS_PREDICTED_IF: IF (SF%PYROLYSIS_MODEL==PYROLYSIS_PREDICTED) THEN
             CASE ('ASH')
                MASH=SUM(ONE_D%MATL_COMP(N)%RHO(:))
          END SELECT
-         IF (MASH .GT. MVG*RSVG*RSCHR*0.999) THEN
+         IF (MASH .GT. MVG*RSVG*RSCHR*0.98) THEN
             ONE_D%BURNAWAY = .TRUE.
          ENDIF
       ENDDO
@@ -3270,7 +3270,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
                                RHO_S(N)*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
                ELSE
                   REACTION_RATE = REACTION_RATE * &
-                               RHO(IIG,JJG,KKG)*Y_O2*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
+                               RHO(IIG,JJG,KKG)*Y_O2*AERVE*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
                ENDIF
                
                RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
