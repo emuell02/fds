@@ -73,6 +73,11 @@ REAL(EB), ALLOCATABLE, DIMENSION(:)       :: REAL_BUFFER_1
 REAL(EB), ALLOCATABLE, DIMENSION(:,:)     :: REAL_BUFFER_2,REAL_BUFFER_3,REAL_BUFFER_5,REAL_BUFFER_6,REAL_BUFFER_8,&
                                              REAL_BUFFER_11,REAL_BUFFER_12,REAL_BUFFER_13,REAL_BUFFER_14
 
+! output version info if fds is invoked without any arguments 
+! (this must be done before MPI is initialized)
+
+CALL VERSION_INFO
+
 ! Initialize MPI (First executable lines of code)
 
 CALL MPI_INIT_THREAD(REQUIRED,PROVIDED,IERR)
@@ -102,9 +107,7 @@ CALL GET_INFO (REVISION,REVISION_DATE,COMPILE_DATE)
 
 ! Read input from CHID.fds file and stop the code if any errors are found
 
-IF (MYID==0) WRITE(LU_ERR,'(A)') ' Reading input file ...'
 CALL READ_DATA(DT)
-IF (MYID==0 .AND. VERBOSE) WRITE(LU_ERR,'(A)') ' Input file read'
 
 CALL STOP_CHECK(1)
 
@@ -351,6 +354,7 @@ IF (RESTART) THEN
    DO NM=LOWER_MESH_INDEX,UPPER_MESH_INDEX
       CALL READ_RESTART(T,DT,NM)
    ENDDO
+   CALL INIT_CUTCELL_DATA(T,DT)  ! Init centroid data (i.e. rho,zz) on cut-cells and cut-faces.
    CALL STOP_CHECK(1)
 ENDIF
 
@@ -430,7 +434,7 @@ IF (.NOT.RESTART) THEN
       CALL UPDATE_GLOBAL_OUTPUTS(T,DT,NM)
       CALL DUMP_MESH_OUTPUTS(T,DT,NM)
    ENDDO
-IF (MYID==0 .AND. VERBOSE) WRITE(LU_ERR,'(A)') ' Called DUMP_MESH_OUTPUTS'
+   IF (MYID==0 .AND. VERBOSE) WRITE(LU_ERR,'(A)') ' Called DUMP_MESH_OUTPUTS'
 ENDIF
 
 ! If there are zones and HVAC pass PSUM
@@ -820,6 +824,7 @@ MAIN_LOOP: DO
    ENDIF
 
    ! Flux average final velocity to cutfaces. Interpolate H to cut-cells from regular fluid cells.
+
    IF (CC_IBM) CALL CCIBM_END_STEP(T,DT,DIAGNOSTICS)
 
    ! Force normal components of velocity to match at interpolated boundaries
