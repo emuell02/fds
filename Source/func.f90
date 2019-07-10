@@ -902,7 +902,7 @@ ONE_D%CHANGE_THICKNESS => OS%LOGICALS(LC+2,STORAGE_INDEX) ; IF (NEW) ONE_D%CHANG
 
 ONE_D%AREA            => OS%REALS(RC+ 1,STORAGE_INDEX) ; IF (NEW) ONE_D%AREA            = 0._EB
 ONE_D%HEAT_TRANS_COEF => OS%REALS(RC+ 2,STORAGE_INDEX) ; IF (NEW) ONE_D%HEAT_TRANS_COEF = 0._EB
-ONE_D%Q_CON_F           => OS%REALS(RC+ 3,STORAGE_INDEX) ; IF (NEW) ONE_D%Q_CON_F           = 0._EB
+ONE_D%Q_CON_F         => OS%REALS(RC+ 3,STORAGE_INDEX) ; IF (NEW) ONE_D%Q_CON_F         = 0._EB
 IF (RADIATION) THEN
    ONE_D%Q_RAD_IN          => OS%REALS(RC+ 4,STORAGE_INDEX) ; IF (NEW) ONE_D%Q_RAD_IN          = SF%EMISSIVITY*SIGMA*TMPA4
    ONE_D%Q_RAD_OUT         => OS%REALS(RC+ 5,STORAGE_INDEX) ; IF (NEW) ONE_D%Q_RAD_OUT         = SF%EMISSIVITY*SIGMA*TMPA4
@@ -915,8 +915,8 @@ ONE_D%AREA_ADJUST     => OS%REALS(RC+ 7,STORAGE_INDEX) ; IF (NEW) ONE_D%AREA_ADJ
 ONE_D%T_IGN           => OS%REALS(RC+ 8,STORAGE_INDEX) ; IF (NEW) ONE_D%T_IGN           = T_BEGIN
 ONE_D%TMP_F           => OS%REALS(RC+ 9,STORAGE_INDEX) ; IF (NEW) ONE_D%TMP_F           = SF%TMP_FRONT
 ONE_D%TMP_B           => OS%REALS(RC+10,STORAGE_INDEX) ; IF (NEW) ONE_D%TMP_B           = SF%TMP_INNER(SF%N_LAYERS)
-ONE_D%U_NORMAL              => OS%REALS(RC+11,STORAGE_INDEX) ; IF (NEW) ONE_D%U_NORMAL              = 0._EB
-ONE_D%U_NORMAL_S             => OS%REALS(RC+12,STORAGE_INDEX) ; IF (NEW) ONE_D%U_NORMAL_S             = 0._EB
+ONE_D%U_NORMAL        => OS%REALS(RC+11,STORAGE_INDEX) ; IF (NEW) ONE_D%U_NORMAL        = 0._EB
+ONE_D%U_NORMAL_S      => OS%REALS(RC+12,STORAGE_INDEX) ; IF (NEW) ONE_D%U_NORMAL_S      = 0._EB
 ONE_D%U_NORMAL_0      => OS%REALS(RC+13,STORAGE_INDEX) ; IF (NEW) ONE_D%U_NORMAL_0      = 0._EB
 ONE_D%RSUM_G          => OS%REALS(RC+14,STORAGE_INDEX) ; IF (NEW) ONE_D%RSUM_G          = RSUM0
 ONE_D%TMP_G           => OS%REALS(RC+15,STORAGE_INDEX) ; IF (NEW) ONE_D%TMP_G           = TMPA
@@ -929,6 +929,7 @@ ONE_D%K_G             => OS%REALS(RC+21,STORAGE_INDEX) ; IF (NEW) ONE_D%K_G     
 ONE_D%U_TAU           => OS%REALS(RC+22,STORAGE_INDEX) ; IF (NEW) ONE_D%U_TAU           = 0._EB
 ONE_D%Y_PLUS          => OS%REALS(RC+23,STORAGE_INDEX) ; IF (NEW) ONE_D%Y_PLUS          = 1._EB
 ONE_D%Z_STAR          => OS%REALS(RC+24,STORAGE_INDEX) ; IF (NEW) ONE_D%Z_STAR          = 1._EB
+ONE_D%PHI_NLS         => OS%REALS(RC+25,STORAGE_INDEX) ; IF (NEW) ONE_D%PHI_NLS         = -1._EB
 
 I1 = RC+1+N_ONE_D_SCALAR_REALS ; I2 = I1 + SF%ONE_D_REALS_ARRAY_SIZE(1) - 1
 ONE_D%MASSFLUX_SPEC(1:I2-I1+1) => OS%REALS(I1:I2,STORAGE_INDEX)
@@ -1426,12 +1427,21 @@ SORT_QUEUE: DO
          END SELECT
       ENDDO
 
-      ! If an obstruction is found, assign its cells the current ZONE, just in case the obstruction is removed
+      ! If an obstruction is found and it has DEVC, CTRL, or is consumable, assign its cells the current ZONE
+      ! just in case the obstruction is removed. If the obstruction is on the boundary also assign the boundary values.
 
       IC = M%CELL_INDEX(II,JJ,KK)
       IF (M%SOLID(IC) .AND. M%OBST_INDEX_C(IC)>0) THEN
          OB => M%OBSTRUCTION(M%OBST_INDEX_C(IC))
-         M%PRESSURE_ZONE(OB%I1+1:OB%I2,OB%J1+1:OB%J2,OB%K1+1:OB%K2) = I_ZONE
+         IF (TRIM(OB%CTRL_ID) /='null' .OR. TRIM(OB%DEVC_ID)/='null' .OR. OB%CONSUMABLE) THEN
+            M%PRESSURE_ZONE(OB%I1+1:OB%I2,OB%J1+1:OB%J2,OB%K1+1:OB%K2) = I_ZONE
+            IF (OB%I1+1==1) M%PRESSURE_ZONE(0:0,OB%J1+1:OB%J2,OB%K1+1:OB%K2) = I_ZONE
+            IF (OB%I2==M%IBAR) M%PRESSURE_ZONE(M%IBP1:M%IBP1,OB%J1+1:OB%J2,OB%K1+1:OB%K2) = I_ZONE
+            IF (OB%J1+1==1) M%PRESSURE_ZONE(OB%I1+1:OB%I2,0:0,OB%K1+1:OB%K2) = I_ZONE
+            IF (OB%J2==M%JBAR) M%PRESSURE_ZONE(OB%I1+1:OB%I2,M%JBP1:M%JBP1,OB%K1+1:OB%K2) = I_ZONE
+            IF (OB%K1+1==1) M%PRESSURE_ZONE(OB%I1+1:OB%I2,OB%J1+1:OB%J2,0:0) = I_ZONE
+            IF (OB%K2==M%KBAR) M%PRESSURE_ZONE(OB%I1+1:OB%I2,OB%J1+1:OB%J2,M%KBP1:M%KBP1) = I_ZONE
+         ENDIF
          CYCLE SEARCH_LOOP
       ENDIF
 
@@ -1449,7 +1459,6 @@ SORT_QUEUE: DO
          Q_K(Q_N) = KK
          M%PRESSURE_ZONE(II,JJ,KK) = I_ZONE
       ENDIF
-
    ENDDO SEARCH_LOOP
 
 END DO SORT_QUEUE

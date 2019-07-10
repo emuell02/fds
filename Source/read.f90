@@ -61,7 +61,7 @@ IF (.NOT.EX) THEN
    STOP_STATUS = VERSION_STOP ; RETURN
 ENDIF
 
-IF (MYID==0) WRITE(LU_ERR,'(A)') ' Reading input file ...'
+IF (MYID==0) WRITE(LU_ERR,'(/A/)') ' Reading FDS input file ...'
 
 ! Allocate the global orientation vector
 
@@ -425,7 +425,7 @@ HEAD_LOOP: DO
 ENDDO HEAD_LOOP
 13 REWIND(LU_INPUT) ; INPUT_FILE_LINE_NUMBER = 0
 
-CLOOP: DO I=1,39
+CLOOP: DO I=1,CHID_LENGTH-1
    IF (CHID(I:I)=='.') THEN ; CALL SHUTDOWN('ERROR: No periods allowed in CHID') ; RETURN ; ENDIF
    IF (CHID(I:I)==' ') EXIT CLOOP
 ENDDO CLOOP
@@ -1979,7 +1979,7 @@ NAMELIST /MISC/ AEROSOL_SCRUBBING, AGGLOMERATION,AEROSOL_AL2O3,ALLOW_SURFACE_PAR
                 HUMIDITY,HVAC_LOCAL_PRESSURE,HVAC_MASS_TRANSPORT,&
                 IBLANK_SMV,IMMERSED_BOUNDARY_METHOD,IBM_PLANE_INTERPOLATION,&
                 MAX_LEAK_PATHS,MAXIMUM_VISIBILITY,MPI_TIMEOUT,&
-                N_INITIAL_PARTICLE_SUBSTEPS,NEAR_WALL_TURBULENCE_MODEL,&
+                N_INITIAL_PARTICLE_SUBSTEPS,NEAR_WALL_TURBULENCE_MODEL,NEW_VEG_LEVEL_SET,&
                 NOISE,NOISE_VELOCITY,NO_EVACUATION,&
                 OVERWRITE,PARTICLE_CFL_MAX,PARTICLE_CFL_MIN,PARTICLE_CFL,PERIODIC_TEST,PROFILING,POROUS_FLOOR,&
                 PR,PROCESS_CUTCELLS,PROJECTION,P_INF,PROCESS_ALL_MESHES,QFAN_BETA_TEST,RAMP_GX,RAMP_GY,RAMP_GZ,&
@@ -6856,17 +6856,18 @@ READ_SURF_LOOP: DO N=0,N_SURF
    ENDIF
 
    ! Level set vegetation fire spread specific
-   SF%VEG_LSET_SPREAD    = VEG_LEVEL_SET_SPREAD
-   SF%VEG_LSET_ROS_HEAD  = VEG_LSET_ROS_HEAD !head fire rate of spread m/s
-   SF%VEG_LSET_ELLIPSE_HEAD = VEG_LSET_ELLIPSE_HEAD !no-wind, no-slope ros for elliptical model in level set
-   SF%VEG_LSET_ROS_FLANK = VEG_LSET_ROS_FLANK !flank fire rate of spread
-   SF%VEG_LSET_ROS_BACK  = VEG_LSET_ROS_BACK !back fire rate of spread
-   SF%VEG_LSET_WIND_EXP  = VEG_LSET_WIND_EXP !exponent on wind cosine in ROS formula
-   SF%VEG_LSET_SIGMA     = VEG_LSET_SIGMA * 0.01 !SAV for Farsite emulation in LSET converted to 1/cm
-   SF%VEG_LSET_HT        = VEG_LSET_HT
-   SF%VEG_LSET_BETA      = VEG_LSET_BETA
-   SF%VEG_LSET_ELLIPSE   = VEG_LSET_ELLIPSE
-   SF%VEG_LSET_TAN2      = VEG_LSET_TAN2
+
+   SF%VEG_LSET_SPREAD       = VEG_LEVEL_SET_SPREAD
+   SF%VEG_LSET_ROS_HEAD     = VEG_LSET_ROS_HEAD     ! head fire rate of spread m/s
+   SF%VEG_LSET_ELLIPSE_HEAD = VEG_LSET_ELLIPSE_HEAD ! no-wind, no-slope ros for elliptical model in level set
+   SF%VEG_LSET_ROS_FLANK    = VEG_LSET_ROS_FLANK    ! flank fire rate of spread
+   SF%VEG_LSET_ROS_BACK     = VEG_LSET_ROS_BACK     ! back fire rate of spread
+   SF%VEG_LSET_WIND_EXP     = VEG_LSET_WIND_EXP     ! exponent on wind cosine in ROS formula
+   SF%VEG_LSET_SIGMA        = VEG_LSET_SIGMA * 0.01 ! SAV for Farsite emulation in LSET converted to 1/cm
+   SF%VEG_LSET_HT           = VEG_LSET_HT
+   SF%VEG_LSET_BETA         = VEG_LSET_BETA
+   SF%VEG_LSET_ELLIPSE      = VEG_LSET_ELLIPSE
+   SF%VEG_LSET_TAN2         = VEG_LSET_TAN2
 
    ! Boundary Vegetation specific
 
@@ -7890,6 +7891,7 @@ PROCESS_SURF_LOOP: DO N=0,N_SURF
    SF%T_IGN = T_BEGIN
    IF (SF%TMP_IGN<5000._EB)                     SF%T_IGN = HUGE(T_END)
    IF (SF%PYROLYSIS_MODEL==PYROLYSIS_PREDICTED) SF%T_IGN = HUGE(T_END)
+   IF (SF%VEG_LSET_SPREAD)                      SF%T_IGN = HUGE(T_END)
 
    ! Species Arrays and Method of Mass Transfer (SPECIES_BC_INDEX)
 
@@ -10800,6 +10802,11 @@ MESH_LOOP_1: DO NM=1,NMESHES
 
                ! Parameters for specified spread of a fire over a VENT
 
+               IF (ALL(XYZ<-1.E5_EB) .AND. SPREAD_RATE>0._EB) THEN
+                  XYZ(1)=0.5_EB*(XB1+XB2)
+                  XYZ(2)=0.5_EB*(XB3+XB4)
+                  XYZ(3)=0.5_EB*(XB5+XB6)
+               ENDIF
                VT%X0 = XYZ(1)
                VT%Y0 = XYZ(2)
                VT%Z0 = XYZ(3)
@@ -12338,6 +12345,8 @@ READ_DEVC_LOOP: DO NN=1,N_DEVC_READ
       IF (TRIM(DV%QUANTITY) == 'REAC SOURCE TERM' .OR. TRIM(DV%QUANTITY) == 'HRRPUV REAC') REAC_SOURCE_CHECK=.TRUE.
       IF (TRIM(QUANTITY)=='SOLID CELL Q_S') STORE_Q_DOT_PPP_S = .TRUE.
       IF (TRIM(QUANTITY)=='DUDT' .OR. TRIM(QUANTITY)=='DVDT' .OR. TRIM(QUANTITY)=='DWDT') STORE_OLD_VELOCITY=.TRUE.
+      IF (TRIM(DV%QUANTITY)=='HRRPUV REAC' .AND. TRIM(DV%SPATIAL_STATISTIC)=='VOLUME INTEGRAL' .AND. &
+          TRIM(DV%TEMPORAL_STATISTIC)=='TIME INTEGRAL' .AND. TRIM(DV%UNITS)=='kg') DV%USE_PREVIOUS_VALUE=.TRUE.
 
       IF (DV%SPATIAL_STATISTIC(1:3)=='MIN') MIN_DEVICES_EXIST = .TRUE.
       IF (DV%SPATIAL_STATISTIC(1:3)=='MAX') MAX_DEVICES_EXIST = .TRUE.
