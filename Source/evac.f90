@@ -992,8 +992,21 @@ CONTAINS
        ! There are fire grids ==> save fed and evac flow fields
        ! Simple chemistry need always REAC line, non-simple chemistry does not need this
        I_EVAC = 16*1 + 8*0 + 4*0 + 2*1 + 1*1
+       WRITE(LU_ERR,    '(A,A)')  ' FDS+Evac pressure method : ', TRIM(PRES_METHOD)
+       IF (TRIM(PRES_METHOD) .NE. 'FFT') THEN
+          WRITE(LU_ERR,'(A)') ' FDS+Evac WARNING: FDS+Evac was developed for FFT solver'
+          WRITE(LU_ERR,'(A)') '                   Verify results for other pressure solvers'
+          WRITE(LU_ERR,'(A)') '                   The FED file is only saved for later use'
+          I_EVAC = 16*1 + 8*0 + 4*0 + 2*1 + 1*0  ! I_EVAC=16 => do only fire calculation, save fed info
+       END IF
     ELSE
        ! There are no fire meshes
+       WRITE(LU_ERR,'(A,A)')  ' FDS+Evac pressure method : ', TRIM(PRES_METHOD)
+       IF (TRIM(PRES_METHOD) .NE. 'FFT') THEN
+          WRITE(LU_ERR,    '(A)') ' FDS+Evac ERROR: FDS+Evac was developed for FFT solver'
+          WRITE(MESSAGE, '(A,A)') ' ERROR: Evacuation only and pressure solver is: ',TRIM(PRES_METHOD)
+          CALL SHUTDOWN(MESSAGE,PROCESS_0_ONLY=.FALSE.) ; RETURN
+       END IF
        IF (EVACUATION_MC_MODE) THEN
           ! MC-mode: Try to read EFF file if exists on the hard disk
           IF (EVACUATION_DRILL) THEN
@@ -14813,6 +14826,7 @@ CONTAINS
     REAL(FB), ALLOCATABLE, DIMENSION(:,:) :: QP, AP
     INTEGER, ALLOCATABLE, DIMENSION(:) :: TA
     TYPE (HUMAN_TYPE), POINTER :: HR =>NULL()
+    INTEGER, PARAMETER :: PART_BOUNDFILE_VERSION=1
     !
     IF (.NOT.ANY(EVACUATION_ONLY)) RETURN
     IF (.NOT.(EVACUATION_ONLY(NM) .AND. EMESH_INDEX(NM)>0)) RETURN
@@ -14822,6 +14836,8 @@ CONTAINS
 
     ! Write the current time to the prt5 file, then start looping through the particle classes
     WRITE(LU_PART(NM)) REAL(T,FB)
+
+    WRITE(LU_PART(NM+NMESHES),'(ES13.6,1X,I4,1X,I4)')T, N_EVAC, PART_BOUNDFILE_VERSION
 
     HUMAN_CLASS_LOOP: DO N = 1, N_EVAC
        ! Count the number of humans to dump out
@@ -14978,7 +14994,7 @@ CONTAINS
           WRITE(LU_PART(NM)) ((QP(I,NN),I=1,NPLIM),NN=1,EVAC_N_QUANTITIES)
        END IF
        !
-       WRITE(LU_PART(NM+NMESHES),'(ES13.6,1X,I4)')T, EVAC_N_QUANTITIES
+       WRITE(LU_PART(NM+NMESHES),'(I4,1X,I7)') EVAC_N_QUANTITIES, NPLIM
        IF (EVAC_N_QUANTITIES > 0) THEN
           DO NN = 1, EVAC_N_QUANTITIES
              IF (NPLIM > 0) THEN

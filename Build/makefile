@@ -13,10 +13,10 @@ VPATH = ../Source
 
 ifeq ($(shell echo "check_quotes"),"check_quotes")
 # windows
-  GIT_HASH := $(shell ..\..\Utilities\Scripts\githash)
-  GIT_STAT := $(shell ..\..\Utilities\Scripts\gitstat)
-  GIT_DATE := $(shell ..\..\Utilities\Scripts\gitlog)
-  GIT_BRANCH := $(shell ..\..\Utilities\Scripts\gitbranch)
+  GIT_HASH := $(shell ..\Scripts\githash)
+  GIT_STAT := $(shell ..\Scripts\gitstat)
+  GIT_DATE := $(shell ..\Scripts\gitlog)
+  GIT_BRANCH := $(shell ..\Scripts\gitbranch)
   BUILD_DATE := $(shell date /t) $(shell time /t)
 else
 # linux/osx
@@ -43,13 +43,13 @@ GITINFOPGI=-Mpreprocess $(GITINFO_BASE) -DBUILDDATE_PP=\""$(BUILD_DATE)\""
 
 ifeq ($(shell echo "check_quotes"),"check_quotes")
 # windows
-  INTELMPI_COMPVERSION := $(shell ..\..\Utilities\Scripts\intel_compversion)
-  GNU_COMPVERSION := $(shell ..\..\Utilities\Scripts\gnu_compversion)
+  INTELMPI_COMPVERSION := $(shell ..\Scripts\intel_compversion)
+  GNU_COMPVERSION := $(shell ..\Scripts\gnu_compversion)
 else
 # linux/osx
-  INTELMPI_COMPVERSION := $(shell ../../Utilities/Scripts/intelmpi_compversion.sh)
-  OPENMPI_COMPVERSION := $(shell ../../Utilities/Scripts/openmpi_compversion.sh)
-  GNU_COMPVERSION := $(shell ../../Utilities/Scripts/gnu_compversion.sh)
+  INTELMPI_COMPVERSION := $(shell ../Scripts/intelmpi_compversion.sh)
+  OPENMPI_COMPVERSION := $(shell ../Scripts/openmpi_compversion.sh)
+  GNU_COMPVERSION := $(shell ../Scripts/gnu_compversion.sh)
 endif
 
 INTELMPI_COMPINFO=-DCOMPVER_PP=\"$(INTELMPI_COMPVERSION)\"
@@ -65,7 +65,7 @@ LFLAGSMKL_CUSTOM =
 ifdef MKLROOT # This assumes the MKL library is available.
 ifeq ($(shell echo "check_quotes"),"check_quotes")
 # windows
-ifeq ($(shell ..\..\Utilities\Scripts\havemkl),1)
+ifeq ($(shell ..\Scripts\havemkl),1)
 # Use cluster_sparse_solver with intelmpi blacs
   FFLAGSMKL_INTEL = -DWITH_MKL /I"$(MKLROOT)"\include
   LFLAGSMKL_INTEL = "$(MKLROOT)"\lib\intel64\mkl_intel_lp64.lib "$(MKLROOT)"\lib\intel64\mkl_intel_thread.lib "$(MKLROOT)"\lib\intel64\mkl_core.lib "$(MKLROOT)"\lib\intel64\mkl_blacs_intelmpi_lp64.lib
@@ -276,7 +276,7 @@ mpi_intel_linux_64_inspect : setup $(obj_mpi)
 # OSX
 mpi_intel_osx_64 : FFLAGS = -m64 -O2 -ipo -no-wrap-margin $(GITINFO) $(OPENMPI_COMPINFO) $(FFLAGSMKL_CUSTOM)
 mpi_intel_osx_64 : LFLAGSMKL = $(LFLAGSMKL_CUSTOM)
-mpi_intel_osx_64 : LFLAGS = -L$(MPIDIST)/lib -static-intel
+mpi_intel_osx_64 : LFLAGS = -static-intel
 mpi_intel_osx_64 : FOPENMPFLAGS = -qopenmp -qopenmp-link static
 mpi_intel_osx_64 : FCOMPL = mpifort
 mpi_intel_osx_64 : obj = fds_mpi_intel_osx_64
@@ -285,7 +285,7 @@ mpi_intel_osx_64 : setup $(obj_mpi)
 
 mpi_intel_osx_64_db : FFLAGS = -m64 -check all -fp-stack-check -warn unused -O0 -auto -WB -traceback -ggdb -fpe0 -fltconsistency -stand:f08 -no-wrap-margin $(GITINFO) $(OPENMPI_COMPINFO) $(FFLAGSMKL_CUSTOM)
 mpi_intel_osx_64_db : LFLAGSMKL = $(LFLAGSMKL_CUSTOM)
-mpi_intel_osx_64_db : LFLAGS = -L$(MPIDIST)/lib -static-intel
+mpi_intel_osx_64_db : LFLAGS = -static-intel
 mpi_intel_osx_64_db : FOPENMPFLAGS = -qopenmp -qopenmp-link static
 mpi_intel_osx_64_db : FCOMPL = mpifort
 mpi_intel_osx_64_db : obj = fds_mpi_intel_osx_64_db
@@ -294,7 +294,7 @@ mpi_intel_osx_64_db : setup $(obj_mpi)
 
 mpi_intel_osx_64_dv : FFLAGS = -m64 -O1 -traceback -no-wrap-margin  $(GITINFO) $(OPENMPI_COMPINFO) $(FFLAGSMKL_CUSTOM)
 mpi_intel_osx_64_dv : LFLAGSMKL = $(LFLAGSMKL_CUSTOM)
-mpi_intel_osx_64_dv : LFLAGS = -L$(MPIDIST)/lib -static-intel
+mpi_intel_osx_64_dv : LFLAGS = -static-intel
 mpi_intel_osx_64_dv : FOPENMPFLAGS = -qopenmp -qopenmp-link static
 mpi_intel_osx_64_dv : FCOMPL = mpifort
 mpi_intel_osx_64_dv : obj = fds_mpi_intel_osx_64_dv

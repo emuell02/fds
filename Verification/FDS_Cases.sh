@@ -55,6 +55,7 @@ $QFDS -d Complex_Geometry sphere_helium_1mesh.fds
 $QFDS -p 3 -d Complex_Geometry sphere_helium_3meshes.fds
 $QFDS -p 3 -d Complex_Geometry sphere_helium_conserve_3meshes.fds
 $QFDS -d Complex_Geometry sphere_radiate.fds
+$QFDS -d Complex_Geometry sphere_leak.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p25.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p125.fds
 $QFDS -d Complex_Geometry saad_CC_explicit_512_cfl_p0625.fds
@@ -136,7 +137,9 @@ $QFDS -d Complex_Geometry rotated_cube_45deg_256_exp.fds
 $QFDS -d Complex_Geometry rotated_cube_45deg_256_imp.fds
 $QFDS -o 4 -d Complex_Geometry rotated_cube_45deg_384_exp.fds
 $QFDS -o 4 -d Complex_Geometry rotated_cube_45deg_384_imp.fds
-                                                                        
+
+$QFDS -d Complex_Geometry cone_1mesh.fds
+
 $QFDS -d Controls activate_vents.fds
 $QFDS -d Controls control_test.fds
 $QFDS -d Controls control_test_2.fds
@@ -174,6 +177,7 @@ $QFDS -d Fires box_burn_away3.fds
 $QFDS -d Fires box_burn_away4.fds
 $QFDS -d Fires box_burn_away5.fds
 $QFDS -d Fires box_burn_away6.fds
+$QFDS -d Fires box_burn_away7.fds
 $QFDS -d Fires box_burn_away_2D.fds
 $QFDS -d Fires box_burn_away_2D_residue.fds
 $QFDS -d Fires box_burn_away1_pyro3d_vs_pyro1d.fds
@@ -550,6 +554,9 @@ $QFDS -d Species ramp_chi_r.fds
 $QFDS -d Species bound_test_1.fds
 $QFDS -d Species bound_test_2.fds
 $QFDS -d Species species_props.fds
+$QFDS -d Species condensation_1.fds
+$QFDS -d Species condensation_2.fds
+$QFDS -d Species condensation_3.fds
 
 $QFDS -d Sprinklers_and_Sprays activate_sprinklers.fds
 $QFDS -d Sprinklers_and_Sprays bucket_test_1.fds
@@ -587,9 +594,11 @@ $QFDS -d Sprinklers_and_Sprays water_evaporation_2.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_3.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_4.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_5.fds
+$QFDS -d Sprinklers_and_Sprays Ranz_Marshall_thermally_thick.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_6.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_7.fds
 $QFDS -d Sprinklers_and_Sprays water_evaporation_8.fds
+$QFDS -d Sprinklers_and_Sprays Li_Chow_thermally_thick.fds
 $QFDS -d Sprinklers_and_Sprays water_fuel_sprays.fds
 $QFDS -d Sprinklers_and_Sprays screen_drag_1.fds
 $QFDS -d Sprinklers_and_Sprays screen_drag_2.fds

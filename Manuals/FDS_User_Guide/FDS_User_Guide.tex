@@ -1462,7 +1462,7 @@ We can also think of VN in terms of a total variation diminishing (TVD) constrai
 \begin{equation}
 u_i^{n+1} = u_i^n + \frac{\delta t \, \nu}{\delta x^2} (u_{i-1}^n - 2u_i^n + u_{i+1}^n )
 \end{equation}
-Very simply, notice that if $\delta t \, \nu/\delta x^2 = 1/2$ then $u_i^{n+1} = (u_{i-1}^n + u_{i+1}^n)/2$.  If the time step is any larger we overshoot the straight line connecting neighboring cell values.  Of course, this restriction is only guaranteed to be TVD if the $u$ field is ``smooth''; otherwise, the neighboring cell values may be shifted in the opposite direction.  Unfortunately, in LES there is no such guarantee and so the VN constraint can be particularly devilish in generating instabilities. For this reason, some practitioners like to employ implicit methods for the diffusive terms.
+Very simply, notice that if $\delta t \, \nu/\delta x^2 = 1/2$ then $u_i^{n+1} = (u_{i-1}^n + u_{i+1}^n)/2$.  If the time step is any larger we overshoot the straight line connecting neighboring cell values.  Of course, this restriction is only guaranteed to be TVD if the $u$ field is ``smooth''; otherwise, the neighboring cell values may be shifted in the opposite direction.  Unfortunately, in LES there is no such guarantee and so the VN constraint can be particularly devilish in generating instabilities. For this reason, some practitioners like to employ implicit methods for the diffusive terms.  The VN constraint is checked by default in all simulation modes.  It may be turned off by setting {\ct CHECK\_VN=F} on {\ct MISC}.
 
 
 
@@ -1584,6 +1584,7 @@ When specifying an initial density it is important to recognize the order in whi
 This example is a case where we have over-defined the problem. Since the temperature is computed from the equation of state using the specified density, the specified temperature will not, in general, satisfy the equation of state, and FDS will overwrite the specified temperature.
 
 \section{Heat Release Rate Per Unit Volume (HRRPUV)}
+\label{info:init_hrrpuv}
 
 The {\ct INIT} line may also be used to specify a volumetric heat source term. For example,
 \begin{lstlisting}
@@ -1591,6 +1592,15 @@ The {\ct INIT} line may also be used to specify a volumetric heat source term. F
 \end{lstlisting}
 indicates that the region bounded by {\ct XB} shall generate 1000~kW/m$^3$. This feature is mainly useful for diagnostics, or to model a fire in a very simple way.
 
+You may specify a time ramp for volumetric heat source via {\ct RAMP\_Q}.  For example,
+\begin{lstlisting}
+&RAMP ID='q1', T=0,  F=0/
+&RAMP ID='q1', T=60, F=1/
+&INIT XB=0.0,0.1,0.0,0.025,0.0,0.1, HRRPUV=1000., RAMP_Q='q1' /
+\end{lstlisting}
+ramps the heat source up from 0 to 1000~kW/m$^3$ linearly over 60 seconds.
+
+The volumetric heat source may be applied both to the gas phase and a solid using 3D heat transfer (see Sec.~\ref{sec:heat_sources}).
 
 \section{Velocity Field}
 \label{info:velo_restart}
@@ -1621,6 +1631,13 @@ If multiple meshes are involved, it is assumed that the {\ct CSVF} lines are pro
 &CSVF UVWFILE='CHID_t001_m002.csv' /
 &MISC PROJECTION=.TRUE. /
 \end{lstlisting}
+The above approach is deprecated because it may be cumbersome if a large number of meshes is needed.  To overcome this issue, you may set {\ct PER\_MESH=T}, which will append the mesh number and {\ct .csv} to the {\ct UVWFILE} string.  For example, if you had 16 meshes you can use
+\begin{lstlisting}
+&CSVF UVWFILE='CHID_t001_m', PER_MESH=T /
+&MISC PROJECTION=.TRUE. /
+\end{lstlisting}
+and FDS will read {\ct CHID\_t001\_m001.csv} through {\ct CHID\_t001\_m016.csv} in the order of the {\ct MESH} lines (note that a {\ct MULT} line for the meshes may also be used).  Note that the the {\ct UVWFILE} string should contain the ``{\ct m}'' (if it exists) as this is not automatically appended.
+
 It is recommended that you also specify {\ct PROJECTION=.TRUE.} on {\ct MISC} if the specified velocity field does not satisfy the divergence constraint to machine precision on a staggered grid (this may not even be true if an analytical solution to the Navier-Stokes equations is sampled at the staggered velocity component locations).
 
 
@@ -1878,9 +1895,9 @@ Obstructions may be created or removed during a simulation. See Section~\ref{inf
 
 \subsection{Thin Obstructions}
 
-Obstructions can have zero thickness. Often, thin sheets, like a window, form a barrier, but if the numerical mesh is coarse relative to the thickness of the barrier, the obstruction might be unnecessarily large if it is assumed to be one layer of mesh cells thick. All faces of an obstruction are shifted to the closest mesh cell. If the obstruction is very thin, the two faces may be approximated on the same cell face. FDS and Smokeview render this obstruction as a thin sheet, but it is allowed to have thermally thick boundary conditions. This feature is fragile, especially in terms of burning and blowing gas. A thin sheet obstruction can only have one velocity vector on its face, thus a gas cannot be injected reliably from a thin obstruction because whatever is pushed from one side is necessarily pulled from the other. For full functionality, the obstruction should be specified to be at least one mesh cell thick. Thin sheet obstructions work fine as flow barriers, but other features are fragile and should be used with caution. To prevent FDS from allowing thin sheet obstructions, set {\ct THICKEN\_OBSTRUCTIONS=.TRUE.} on the {\ct MISC} line, or {\ct THICKEN=.TRUE.} on each {\ct OBST} line for which the thin sheet assumption is not allowed.
+An obstruction that is relatively thin compared to the gas phase numerical grid spacing is approximated as an infinitely thin sheet. These obstructions, like window panes, form a flow and (partial) radiation barrier, but if the numerical mesh is coarse relative to its thickness, the obstruction might be unnecessarily large if it is assumed to be one layer of mesh cells thick. Smokeview renders this obstruction as a thin sheet, but it is allowed to have thermally-thick boundary conditions. This obstruction\footnote{Prior to FDS 6.7.2, thin obstructions were not allowed to burn. That restriction has been eliminated.} has the drawback that it is not possible to specify a normal velocity component on its surface. A thin sheet obstruction can only have one velocity vector on its face, thus a gas cannot be injected or extracted reliably from a thin obstruction because whatever is pushed from one side is necessarily pulled from the other. If you want to create a simple fan, for example, the obstruction should be specified to be at least one mesh cell thick. To prevent FDS from allowing thin sheet obstructions, set {\ct THICKEN\_OBSTRUCTIONS=.TRUE.} on the {\ct MISC} line, or {\ct THICKEN=.TRUE.} on each {\ct OBST} line for which the thin sheet assumption is not allowed.
 
-Obstructions that are too small relative to the underlying numerical mesh are rejected. Be careful when testing cases on coarse meshes.
+Obstructions that are too small relative to the underlying numerical mesh are rejected. That is, if at least two of the three obstruction dimensions are less than half of the corresponding cell dimensions, the obstruction is ignored.
 
 \subsection{Overlapping Obstructions}
 
@@ -2539,6 +2556,10 @@ For some verification and validation cases, it is useful to employ a special cor
 \ee
 where $\hbox{Nu}$ is the Nusselt number, $k$ is the thermal conductivity of the gas, $D$ is the diameter of the cylinder, Ra is the Rayleigh number, Pr is the Prandtl number, $T_{\rm s}$ is the surface temperature, $T_\infty$ is the ambient or surrounding gas temperature, $g$ is the acceleration of gravity, $\nu=\mu/\rho$ is the kinematic viscosity of the gas, and $\alpha=k/(\rho c_p)$ is the thermal diffusivity. To specify this heat transfer model for a particular surface, set {\ct HEAT\_TRANSFER\_MODEL} equal to {\ct 'FREE HORIZONTAL CYLINDER'} on the {\ct SURF} line.
 
+\subsubsection{Heat Transfer with Blowing}
+
+During pyrolysis of a solid or evaporation of a liquid the mass transfer off the surface generats a blowing velocity that alters the thermal and momentum boundary layers, thus affecting the heat and mass transfer coefficients.  For a surface with blowing, consider using the correlations discussed in Sazhin \cite{Sazhin:2006} with the Spalding mass transfer corrections \cite{Spalding:1}.  These may be activated by setting {\ct GEOMETRY} and {\ct HEAT\_TRANSFER\_MODEL} to {\ct 'BLOWING PLATE'} or {\ct 'BLOWING SPHERE'} as appropriate on the {\ct SURF} line.  Note that for the {\ct 'BLOWING SPHERE'} the time dependent {\ct THICKNESS} of the surface is used in computing the Reynolds number.  For {\ct 'BLOWING PLATE'} the length scale for the Reynolds number is the usual {\ct CONVECTION\_LENGTH\_SCALE} set on the {\ct SURF} line.
+
 
 \subsection{Special Topic: Adiabatic Surfaces}
 \label{info:adiabatic}
@@ -2640,7 +2661,7 @@ The back side emissivity of the surface can be controlled by specifying {\ct EMI
 \subsection{Initial and Back Side Temperature}
 \label{info:TMP_INNER}
 
-By default, the initial temperature of the solid material is set to ambient ({\ct TMPA} on the {\ct MISC} line). Use {\ct TMP\_INNER} on the {\ct SURF} line to specify a different initial temperature of the solid. The layers of the surface can have different initial temperatures. Also, the back side temperature boundary condition of a solid can be set using the parameter {\ct TMP\_BACK} on the {\ct SURF} line. {\ct TMP\_BACK} is not the actual back side surface temperature, but rather the gas temperature to which the back side surface is exposed. This parameter has no meaning for surfaces with {\ct BACKING='EXPOSED'} or {\ct BACKING='INSULATED'}.
+By default, the initial temperature of the solid material is set to ambient ({\ct TMPA} on the {\ct MISC} line). Use {\ct TMP\_INNER} on the {\ct SURF} line to specify a different initial temperature of the solid. The layers of the surface can have different initial temperatures. Also, the back side temperature boundary condition of a solid can be set using the parameter {\ct TMP\_BACK} on the {\ct SURF} line. {\ct TMP\_BACK} is not the actual back side surface temperature, but rather the gas temperature to which the back side surface is exposed. This parameter requires that {\ct BACKING='VOID'}. A {\ct RAMP} for {\ct TMP\_BACK} can be specified with {\ct RAMP\_T\_B}.
 
 As an alternative to {\ct TMP\_INNER} one can also use {\ct RAMP\_T\_I} to specify the name of a {\ct RAMP} containing a depth vs. temperature profile for the surface.
 
@@ -2742,16 +2763,16 @@ can be used to model a power cable that is 5~m long, cylindrical in cross sectio
 \subsection{Special Topic: Solid Phase Numerical Gridding Issues}
 \label{info:solid_phase_stability}
 
-To compute the temperature and reactions inside the solids, FDS solves the one-dimensional heat transfer equation numerically. The size of the mesh cells on the surface of the solid is automatically chosen using a rule that makes the cell size smaller than the square root of the material diffusivity $(k/\rho c)$. By default, the solid mesh cells increase towards the middle of the material layer and are smallest on the layer boundaries.
+Inside solids, FDS solves the one-dimensional heat transfer equation numerically in the direction normal to the surface. The node spacing for the numerical solver is not uniform, in general. The size of first cell at the surface is automatically chosen to be less than or equal to $\sqrt{\tau k/\rho c}$, where $\tau$ is a time constant set to 1~s and $k/\rho c$ is the thermal diffusivity. By default, the node spacing is less dense in the center of the layer and more dense at the boundaries to better resolve steep gradients in the temperature.
 
-The default parameters are usually appropriate for simple heat transfer calculations but sometimes the use of pyrolysis reactions makes the temperatures and burning rate fluctuate. Adjustments may also be needed in case of extremely transient heat transfer situations. The numerical accuracy and stability of the solid phase solution may be improved by one of the following methods:
+The default parameters governing the node spacing are appropriate for simple heat transfer calculations, but sometimes pyrolysis reactions cause spurious fluctuations in temperature and burning rate. The numerical accuracy and stability of the solid phase solution may be improved as follows:
 \begin{description}
-\item[Make the mesh density more uniform ] inside the material by setting {\ct STRETCH\_FACTOR(NL)=1.} on the {\ct SURF} line. This will generate a perfectly uniform mesh for layer number {\ct NL}. (This happens automatically if the layer contains one or more reacting materials.) Values between 1 and 2 give different levels of stretching. Note that {\ct STRETCH\_FACTOR} needs to be specified for all the layers.
-\item[Make the mesh cells smaller] by setting {\ct CELL\_SIZE\_FACTOR} less than 1.0. For example, a value of 0.5 makes the mesh cells half the size. The scaling always applies to all layers.
-\item[Improve the time resolution] by setting {\ct WALL\_INCREMENT=1} on the {\ct TIME} line. This forces the solid phase temperatures to be solved on every time step.
-\item[Limit the number of cells in a layer] by setting {\ct N\_LAYER\_CELLS\_MAX}. This array input has a default of 1000.
+\item[Make the node spacing more uniform] inside the material by setting {\ct STRETCH\_FACTOR(NL)=1.} on the {\ct SURF} line. This will generate a perfectly uniform mesh for layer number {\ct NL}. Values between 1 and 2 give different levels of stretching. The default value of 2 indicates that the second cell is twice as thick as the first, the third is twice the second, and so on until the mid-depth of the layer is reached, at which point the cells shrink following the same pattern. Note that {\ct STRETCH\_FACTOR} needs to be specified for all the layers unless the default value is desired.
+\item[Make the mesh cells smaller] by setting {\ct CELL\_SIZE\_FACTOR} less than 1. For example, a value of 0.5 makes the mesh cells half the size. The scaling applies to all layers.
+\item[Improve the time resolution] by setting {\ct WALL\_INCREMENT=1} on the {\ct TIME} line. This forces the solid phase solution to be updated every time step instead of the default every other time step.
+\item[Limit the number of cells in a layer] by setting {\ct N\_LAYER\_CELLS\_MAX(:)}. This array input has a default of 1000. Reducing this value does not necessarily improve accuracy, but it does save computing time. However, rarely does the solid phase require this many cells. The output file {\ct CHID.out} contains the coordinates of the solid phase nodes.
 \end{description}
-If all the material components of the surface are reacting, and the pyrolysis reactions have no solid residue, the thickness of the surface is going to shrink when the surface reacts. Each of the shrinking layers will vanish from the computation when its thickness gets smaller than a prescribed limiting value. This value can be set on a {\ct SURF} line via {\ct MINIMUM\_LAYER\_THICKNESS} keyword, defaulting to $1 \times 10^{-6}$~m. When all the material of a shrinking surface is consumed but {\ct BURN\_AWAY} is not prescribed, the surface temperature is set to {\ct TMP\_BACK}, convective heat flux to zero and burning rate to zero.
+If all the material components react and leave no solid residue, the thickness of the solid will shrink. Each of the shrinking layers will vanish from the computation when its thickness gets smaller than a prescribed limiting value. This value can be set on a {\ct SURF} line using {\ct MINIMUM\_LAYER\_THICKNESS}, defaulting to $1 \times 10^{-6}$~m. When all the material of a shrinking surface is consumed but {\ct BURN\_AWAY} is not prescribed, the surface temperature is set to {\ct TMP\_BACK}, convective heat flux to zero and burning rate to zero.
 
 See Section~\ref{solid_phase_verification} for ways to check and improve the accuracy of the solid phase calculation.
 
@@ -2795,6 +2816,8 @@ You can also use {\ct INTERNAL\_HEAT\_SOURCE} in \si{kW/m^3} on the {\ct OBST} l
 &OBST XB=..., HT3D=.TRUE., MATL_ID='orange', SURF_ID='SPHERE', INTERNAL_HEAT_SOURCE=200./
 \end{lstlisting}
 
+Both {\ct HRRPUV} and {\ct INTERNAL\_HEAT\_SOURCE} may be use a time ramp via {\ct RAMP\_Q} on their respective {\ct INIT} or {\ct OBST} lines.
+
 \subsubsection*{Internal Radiation}
 \label{sec:radiation_parameters}
 
@@ -2837,7 +2860,7 @@ specifies the Mass Loss Rate of fuel gas Per Unit Area in \si{kg/(m$^2$.s)}. Do 
 \subsection{Special Topic: A Radially-Spreading Fire}
 \label{info:spread}
 
-Sometimes it is desired that a fire spread radially at some specified rate. Rather than trying to obtain material properties to directly model the ignition and spread of the fire, you can specify the fire spread rate directly. First, you need to add a {\ct SURF} line with a specified heat release rate, {\ct HRRPUA}, and an optional time history parameter, {\ct RAMP\_Q} or {\ct TAU\_Q} (see Section \ref{info:RAMP_Time}). Then, you must specify {\ct XYZ} and {\ct SPREAD\_RATE} on either a {\ct VENT} or the same {\ct SURF} line. The fire is directed to start at the point {\ct XYZ} and spread radially at a rate of {\ct SPREAD\_RATE} (m/s). The optional ramp-up of the HRR begins at the time when the fire arrives at a given point. For example, the lines
+Sometimes it is desired that a fire spread radially at some specified rate. Rather than trying to obtain material properties to directly model the ignition and spread of the fire, you can specify the fire spread rate directly. First, you need to add a {\ct SURF} line with a specified heat release rate, {\ct HRRPUA}, and an optional time history parameter, {\ct RAMP\_Q} or {\ct TAU\_Q} (see Section \ref{info:RAMP_Time}). Then, you must specify {\ct XYZ} and {\ct SPREAD\_RATE} on either a {\ct VENT} or the same {\ct SURF} line. The fire is directed to start at the point {\ct XYZ} (if unspecified, default is the center point of the {\ct VENT}) and spread radially at a rate of {\ct SPREAD\_RATE} (m/s). The optional ramp-up of the HRR begins at the time when the fire arrives at a given point. For example, the lines
 \begin{lstlisting}
 &SURF ID='FIRE', HRRPUA=500.0, RAMP_Q='fireramp' /
 &RAMP ID='fireramp', T= 0.0, F=0.0 /
@@ -3219,6 +3242,7 @@ The burnout time of a liquid fuel is calculated automatically based on the liqui
 \label{box_burn_away4}
 \label{box_burn_away5}
 \label{box_burn_away6}
+\label{box_burn_away7}
 \label{box_burn_away_2D}
 \label{box_burn_away_2D_residue}
 
@@ -3243,6 +3267,8 @@ except for the fourth case, where the amount of released gas is affected by the 
 \ee
 The same case is tested in two dimensions ({\ct box\_burn\_away\_2D} and {\ct box\_burn\_away\_2D\_residue}). In the latter case, only half of the mass is converted to fuel, leaving behind a residue that is 50~\% of the original mass. The box is forced to burn away by setting the {\ct BULK\_DENSITY} to 10~kg/m$^3$. This is the {\em combustible} mass. These two cases exhibit a fictitious increase in solid mass when new unburned surfaces are exposed as entire mesh cells disappear. The increased mass is just an artifact of reporting the residual solid mass as the product of surface density and surface area. Both the final solid mass and the gaseous degradation products should match the expected values at the end of the simulation.
 
+Finally, the test case {\ct box\_burn\_away7} shown in Fig.~\ref{box_burn_away_2D_fig} demonstrates that it is possible to burn and make disappear a thin, zero-cell thick obstruction. Versions of FDS prior to 6.7.2 did not allow this to happen. In the test case, a 0.4~m by 0.4~m by 0.01~m thin slab with a density of 20~kg/m$^3$ is heated and evaporates away, creating 0.032~kg of fuel gas.
+
 \begin{figure}[p]
 	\begin{tabular*}{\textwidth}{lr}
 		\includegraphics[width=3.2in]{SCRIPT_FIGURES/box_burn_away1} &
@@ -3261,8 +3287,9 @@ The same case is tested in two dimensions ({\ct box\_burn\_away\_2D} and {\ct bo
 \begin{tabular*}{\textwidth}{lr}
 \includegraphics[width=3.2in]{SCRIPT_FIGURES/box_burn_away_2D} &
 \includegraphics[width=3.2in]{SCRIPT_FIGURES/box_burn_away_2D_residue} \\
+\multicolumn{2}{c}{\includegraphics[width=3.2in]{SCRIPT_FIGURES/box_burn_away7}}
 \end{tabular*}
-\caption[Results of the {\ct box\_burn\_away\_2D} test cases]{Output of {\ct box\_burn\_away\_2D} test cases.}
+\caption[Results of the {\ct box\_burn\_away\_2D} and {\ct box\_burn\_away7} test cases]{Output of {\ct box\_burn\_away\_2D} and {\ct box\_burn\_away7} test cases.}
 \label{box_burn_away_2D_fig}
 \end{figure}
 
@@ -3943,19 +3970,15 @@ FDS assumes pressure to be composed of a ``background'' component, $\bp(z,t)$, p
 
 A pressure zone can be any region within the computational domain that is separated from the rest of the domain, or the exterior, by solid obstructions. There is currently no algorithm within FDS to identify these zones based solely on your specified obstructions. Consequently, it is necessary that you identify these zones explicitly in the input file. The basic syntax for a pressure {\ct ZONE} is:
 \begin{lstlisting}
-&ZONE XB=0.3,1.2,0.4,2.9,0.3,4.5 /
+&ZONE XYZ=1.2,3.4,5.6 /
 \end{lstlisting}
-This means that the rectangular region, $0.3<x<1.2$, $0.4<y<2.9$, $0.3<z<4.5$, is assumed to be within a sealed compartment. There can be multiple {\ct ZONE}s declared. The indices of the zones, which are required for the specification of leaks and fans, are determined simply by the order in which they are specified in the input file. By default, the exterior of the computational domain is Zone~0. If there are no {\ct OPEN} boundaries, the entire computational domain will be assumed to be Zone~1.
+The parameter {\ct XYZ}\footnote{Past versions of FDS also made use of the sextuplet {\ct XB} to specify a pressure zone. This parameter still works, but {\ct XYZ} is preferred.} specifies a single point $(1.2,3.4,5.6)$ that is within a sealed compartment, and it is not embedded within a solid obstruction. There can be multiple {\ct ZONE}s declared. The indices of the zones, which are required for the specification of leaks and fans, are determined simply by the order in which they are specified in the input file. By default, the exterior of the computational domain is Zone~0. If there are no {\ct OPEN} boundaries, the entire computational domain will be assumed to be Zone~1.
 
-There are several restrictions to assigning pressure zones. First, the declared pressure zones must be completely within a region of the domain that is bordered by solid obstructions. If the sealed region is not rectangular, FDS will extend the specified {\ct ZONE} boundaries to conform to the non-rectangular region. It is possible to ``break'' pressure zones by removing obstructions between them. An example of how to break pressure zones is given below. Second, pressure zones can span multiple meshes, but it is recommended that you check the pressure in each mesh to ensure consistency. Also, if the {\ct ZONE} does span multiple meshes, make sure that the specified rectangular coordinates do so as well. This allows FDS to determine the actual extent of the {\ct ZONE} independently for each mesh. If the pressure zone has a non-rectangular shape such that it winds its way in and out of multiple meshes and you cannot create a single rectangular region to span it, you may use a series of points, one in each mesh touched by the pressure zone:
-\begin{lstlisting}
-&ZONE XYZ=1.0,2.0,2.3, 3.1,4.2,5.6, ... /
-\end{lstlisting}
-Each point should be clear of solid obstructions. A search algorithm will determine all other grid cells within the particular mesh belonging to that pressure zone.
+There are several restrictions to assigning pressure zones. First, the declared pressure zones must be completely within a region of the domain that is bordered by solid obstructions. It is possible to ``break'' pressure zones by removing obstructions between them. An example of how to break pressure zones is given below. Second, pressure zones can span multiple meshes, but it is recommended that you check the pressure in each mesh to ensure consistency. If the {\ct ZONE} does span multiple meshes, you do {\em not}\footnote{Past versions of FDS required you to specify a separate {\ct XYZ} point for each mesh spanned by the pressure zone. This is no longer required.} need to add multiple {\ct XYZ} points for each mesh. A search algorithm will determine all other grid cells belonging to that pressure zone.
 
-Note that if you plan to have one zone open up to another via the removal of an obstruction, make sure that the coordinates of the two zones abut (i.e., touch) even if one of the zones includes the solid obstruction that separates them. FDS recognizes that a zone boundary has been removed when two adjacent cells belonging to two different zones have no solid obstruction between them. It is recommended that you extend at least one of the zone boundaries {\em into} the solid obstruction separating the two zones. That way, when the obstruction is removed, the newly created gas phase cells will be assigned to one or the other zone and it will become obvious that two adjacent gas phase cells are of two different zones, at which point the zones will merge and no longer have distinct background pressures.
+Note that if you remove a solid obstruction (like a door or window) separating two pressure zones, FDS will merge the two zones into one such that the background pressure within each remains nearly the same.
 
-For the special case where a zone has periodic boundaries ({\ct SURF\_ID='PERIODIC'} on {\ct VENT}), you must add {\ct PERIODIC=.TRUE.} on the {\ct ZONE} line.
+For the special case where a pressure zone has periodic boundaries ({\ct SURF\_ID='PERIODIC'} on {\ct VENT}), you must add {\ct PERIODIC=.TRUE.} on the {\ct ZONE} line.
 
 
 \subsubsection{Example Case: Pressure Rise in a Compartment}
@@ -3986,16 +4009,9 @@ In this example, three simple compartments are initially isolated from each othe
 figure on the right uses 1~s, the default.}
 \label{zone_break}
 \end{figure}
-Notice that the pressures do not come to equilibrium instantaneously. Rather, the {\ct PRESSURE\_RELAX\_TIME} (on the {\ct PRES} line) is applied to bring the zones
-into equilibrium over a specified period of time. This is done for several reasons. First, in reality doors and windows do not magically disappear as they do in FDS. It takes
-a finite amount of time to fully open them, and the slowing of the pressure increase/decrease is a simple way to simulate the effect.
-Second, relatively large pressure differences between zones wreak havoc with flow solvers, especially ones like FDS that
-use a low Mach number approximation. To maintain numerical stability, FDS gradually brings the pressures into equilibrium. This second point ought to be seen as a warning.
+Notice that the pressures do not come to equilibrium instantaneously. Rather, the {\ct PRESSURE\_RELAX\_TIME} (on the {\ct PRES} line) is applied to bring the zones into equilibrium over a specified period of time. This is done for several reasons. First, in reality doors and windows do not magically disappear as they do in FDS. It takes a finite amount of time to fully open them, and the slowing of the pressure increase/decrease is a simple way to simulate the effect. Second, relatively large pressure differences between zones wreak havoc with flow solvers, especially ones like FDS that use a low Mach number approximation. To maintain numerical stability, FDS gradually brings the pressures into equilibrium. This second point ought to be seen as a warning.
 
-Since pressure zones are defined using {\ct XB}, it might not be possible to define a complexly shaped set of pressure zones using just the {\ct ZONE} inputs.  A work around for this is to define the complex zone as a series of zones in the same manner you would divide a domain into multiple meshes.  The check for merged pressure zones only works if two zones were initially isolated at the start of the calculation (there must have been a wall that was removed). Therefore, define an obstruction at the boundary of the zones that is removed after the first time step.
-
-Do not use FDS to study the sudden rupture of pressure vessels! Its low Mach number formulation does not allow for high speed, compressible effects that
-are very important in such analyses. The zone breaking functionality described in this example is only intended to be used for relatively small pressure differences (<0.1~atm) between compartments. Real buildings cannot withstand substantially larger pressures anyway.
+Do not use FDS to study the sudden rupture of pressure vessels! Its low Mach number formulation does not allow for high speed, compressible effects that are very important in such analyses. The zone breaking functionality described in this example is only intended to be used for relatively small pressure differences (<0.1~atm) between compartments. Real buildings cannot withstand substantially larger pressures anyway.
 
 \subsubsection{Example Case: Irregularly Shaped Zone}
 \label{zone_shape}
@@ -4029,8 +4045,8 @@ entirely surrounded by solid obstructions. For example, the interior of a closed
 
 The pressure zone leakage approach is intended to capture the bulk leakage that occurs through walls. This approach assumes that the amount of leaking gas is very small, and that it will exchange sufficient heat as it moves through a wall to be at the same temperature as the wall surface. With this approach the pressure between the source and destination zones is used to compute a leakage flow via the HVAC model. That flow is then uniformly imposed over all surfaces designated as part of the leakage path. The first step is to define pressure zones, leakage areas, and a description of the surfaces through which leaking occurs:
 \begin{lstlisting}
-&ZONE XB=..., LEAK_AREA(0)=0.0001 /
-&ZONE XB=..., LEAK_AREA(1)=0.0002, LEAK_AREA(0)=0.0003 /
+&ZONE XYZ=..., LEAK_AREA(0)=0.0001 /
+&ZONE XYZ=..., LEAK_AREA(1)=0.0002, LEAK_AREA(0)=0.0003 /
 &SURF ID='LEAKY EXTERIOR WALL',..., LEAK_PATH=1,0 /
 &SURF ID='LEAKY INTERIOR WALL',..., LEAK_PATH=1,2 /
 \end{lstlisting}
@@ -4038,7 +4054,7 @@ The first line designates a region of the computational domain to be Pressure Zo
 
 The volume flow, $\dot{V}$, through a leak of area $A_{\rm L}$ is given by
 \be  \dot{V}_{\rm leak} = A_{\rm L} \; \hbox{sign} (\Delta p) \; \sqrt{2 \frac{ | \Delta p |}{\rho_\infty}} \ee
-where $\Delta p$ is the pressure difference between the adjacent compartments (in units of Pa) and $\rho_\infty$ is the ambient density (in units of kg/m$^3$). The discharge coefficient normally seen in this type of formula is assumed to be 1.
+where $\Delta p$ is the pressure difference between the adjacent compartments (in units of Pa) and $\rho_\infty$ is the ambient density (in units of kg/m$^3$). The discharge coefficient normally seen in this type of formula is assumed to be~1.
 
 In a typical building as the interior pressure rises, the leakage area will grow as small gaps, cracks, and other leakage paths open up. Leakage tests performed according to test standards such as ASTM~E~779 provide two additional data points to quantify this behavior. These are the {\ct LEAK\_PRESSURE\_EXPONENT} and the {\ct LEAK\_REFERENCE\_PRESSURE}. The use of these additional inputs are shown in the equation below as $n$ and $\Delta p_{\rm ref}$ respectively where $A_{\rm L,ref}$ is given by {\ct LEAK\_AREA}.
 \be  A_{\rm L} = A_{\rm L,ref} \left( \frac{\Delta p}{\Delta p_{\rm ref}} \right)^{n-0.5} \ee
@@ -4329,8 +4345,21 @@ It is possible to rotate and/or translate various objects within an FDS simulati
 &MOVE ID='spin', ROTATION_ANGLE=45., X0=2., Y0=3., Z0=4., AXIS=1,0,0 /
 \end{lstlisting}
 causes an object to be rotated 45$^\circ$ about the direction vector ({\ct AXIS}) (1,0,0) emanating from the point $(x_0,y_0,z_0)$. You may also translate the object in the three coordinate directions using the parameters {\ct DX}, {\ct DY}, {\ct DZ}, each in meters.
+It is also possible to rotate, scale and translate an object using a $3 \times 4$ transformation matrix. The equation that describes the transformation for a point $p$ with coordinates $x,y,z$ is:
+%
+\begin{equation}
+\left\{ \begin{array}{c} x' \\ y' \\ z' \\ \end{array} \right\} =
+\left[ \begin{array}{cccc} i_1 & j_1 & k_1 & a_1 \\ i_2 & j_2 & k_2 & a_2 \\ i_3 & j_3 & k_3 & a_3 \\ \end{array} \right]
+\left\{ \begin{array}{c} x \\ y \\ z \\ 1 \\ \end{array} \right\}
+\end{equation}
+%
+where the primes refer to the new location of point $p$. In that case the previous {\ct MOVE} line is defined as:
+\begin{lstlisting}
+&MOVE ID='My Move', T34 = i1,i2,i3, j1,j2,j3, k1,k2,k3, a1,a2,a3 /
+\end{lstlisting}
+where $(i_1,i_2,i_3)$, $(j_1,j_2,j_3)$ and $(k_1,k_2,k_3)$ are the orthogonal basis vectors for the rotation and scaling operations, and $(a_1,a_2,a_3)$ is the translation vector. Note that if {\ct T34} is defined, it takes precedence over all other transformation parameters.
 
-Currently, this feature only applies to point and line devices, and in future shall be applied to non-rectangular immersed objects.
+Currently, the move feature only applies to point and line devices, and in future shall be applied to non-rectangular immersed objects.
 
 
 
@@ -5801,6 +5830,11 @@ By default, the {\ct GEOMETRY} is {\ct 'CARTESIAN'}, in which case you need to p
 
 For  {\ct 'CYLINDRICAL'} or {\ct 'SPHERICAL'} particles, specify the {\ct INNER\_RADIUS} and {\ct THICKNESS} of the individual layers. Alternatively, you can just specify the {\ct RADIUS} if the cylinder or sphere is solid and has only one material component. The default value of {\ct INNER\_RADIUS} is 0~m, which means that the radius of the cylinder or sphere is the sum of the {\ct THICKNESS} values. Remember that the layers are to be listed starting at the surface, not the center. For {\ct 'CYLINDRICAL'} particles, specify a {\ct LENGTH} as well.
 
+\subsubsection{Thermally Thick Droplet Model}
+\label{info:themally_thick_droplet}
+
+Note that if the {\ct GEOMETRY} is set to {\ct 'SPHERICAL'} and a {\ct BOILING\_TEMPERATURE} is specified, thus invoking the liquid pyrolysis model, then the mass transfer relationships will follow those of an evaporating droplet.  The difference between this model and the default droplet model is that in this case the internal droplet temperature will be solved for using the 1D conduction solver.  Usually, the {\ct CELL\_SIZE\_FACTOR} needs to be decreased to get sufficient resolution inside the drop---you should double check the number of solid phase nodes by examining the {\ct CHID.out} file.  Also, you should set {\ct HEAT\_TRANSFER\_MODEL = 'BLOWING SPHERE'} on the {\ct SURF} line.
+
 \subsubsection{Particles with Periodic Boundary Conditions}
 \label{info:periodic-particles}
 
@@ -6134,25 +6168,21 @@ If you do not want to introduce the particles right at the start of the simulati
 Modeling fire suppression by water has three principal components: transporting the water droplets through the air, tracking the water along the solid surface, and predicting the reduction of the burning rate. This section addresses the latter two.
 
 
-\subsection{Velocity on Solid Surfaces}
+\subsection{Droplet Movement on Solid Surfaces}
 \label{info:surface_droplets}
+\label{cascade}
 
-When a droplet strikes a solid surface\footnote{If you do not want droplets to accumulate on solid surfaces, set {\ct ALLOW\_SURFACE\_PARTICLES=.FALSE.} on the {\ct MISC} line. It is normally {\ct .TRUE.}}, it sticks and is reassigned a new speed and direction. If the surface is horizontal, the direction is randomly chosen. If vertical, the direction is downwards. The rate at which the droplets move over the horizontal and vertical surfaces is difficult to quantify. The parameters {\ct HORIZONTAL\_VELOCITY} and {\ct VERTICAL\_VELOCITY} on the {\ct PART} line allow you to control the rate at which droplets move horizontally or vertically (downward). The defaults are 0.2~m/s and 0.5~m/s, respectively.
+When a droplet strikes a solid surface\footnote{If you do not want droplets to accumulate on solid surfaces, set {\ct ALLOW\_SURFACE\_PARTICLES=.FALSE.} on the {\ct MISC} line. It is normally {\ct .TRUE.}}, it sticks and is reassigned a new speed and direction. If the surface is horizontal, the direction is randomly chosen. If vertical, the direction is downwards. The parameters {\ct HORIZONTAL\_VELOCITY} and {\ct VERTICAL\_VELOCITY} on the {\ct PART} line allow you to control the speed at which droplets move horizontally or vertically (downward). The defaults are 0.2~m/s and 0.5~m/s, respectively.
 
-There are some applications, like the suppression of racked storage commodities, where it is useful to allow water droplets to move horizontally along the underside of a solid object. It is difficult to model this phenomenon precisely because it involves surface tension, surface porosity and absorption, and complicated geometry. However, a way to capture some of the effect is to set {\ct ALLOW\_UNDERSIDE\_PARTICLES=.TRUE.} on the {\ct MISC} line. It is normally false. Also, note that when droplets hit obstructions, the vertical direction is assumed to coincide with the $z$ axis, regardless of any change to the gravity vector, {\ct GVEC}.
+There are some applications, like the suppression of racked storage commodity fires, where it is useful to allow water droplets to move horizontally along the underside of a solid object. It is difficult to model this phenomenon precisely because it involves surface tension, surface porosity and absorption, and complicated geometry. However, a way to capture some of the effect is to set {\ct ALLOW\_UNDERSIDE\_PARTICLES=.TRUE.} on the {\ct MISC} line. It is normally false. Also, note that when droplets hit obstructions, the vertical direction is assumed to coincide with the $z$ axis, regardless of any change to the gravity vector, {\ct GVEC}.
 
-A useful sample case to demonstrate various features of droplet motion on solid obstructions is the test case called {\ct cascade.fds}. Figure~\ref{cascade} shows a stream of water droplets impinging on the top of a box followed by the cascading of water droplets over the top edge.
+A useful sample case to demonstrate various features of droplet motion on solid obstructions is the test case called {\ct Sprinklers\_and\_Sprays/cascade.fds}. The image to the left in Fig.~\ref{cascade_image} shows 1~L of water droplets cascading down the sides of an array of boxes. The plot to the right checks that the total water mass is conserved. Note that some of the water evaporates into the compartment that initially has zero humidity.
 
 \begin{figure}[ht]
-\begin{center}
-\begin{tabular}{lcr}
-\includegraphics[height=3in]{SCRIPT_FIGURES/cascade_1} &
-\includegraphics[height=3in]{SCRIPT_FIGURES/cascade_2} &
-\includegraphics[height=3in]{SCRIPT_FIGURES/cascade_3}
-\end{tabular}
-\end{center}
-\caption[Example of water cascading over solid obstructions]{Smokeview rendering of the {\ct cascade} test case.}
-\label{cascade}
+\includegraphics[height=3in]{SCRIPT_FIGURES/cascade_image}
+\includegraphics[height=3in]{SCRIPT_FIGURES/cascade}
+\caption[Results of the {\ct cascade} test case]{(Left) Smokeview rendering of the {\ct cascade} test case, demonstrating that water droplets move randomly at 0.2~m/s over horizontal surfaces, and descend uniformly at 0.5~m/s over vertical surfaces. The plot at the right demonstrates that water mass is conserved in the simulation.}
+\label{cascade_image}
 \end{figure}
 
 
@@ -6495,8 +6525,9 @@ where $ \Delta z$ is the distance from the leak point to the neutral plane.  Usi
 \clearpage
 
 \section{Thermal Degradation Model for Vegetation}
+\label{vegetation_model}
 
-FDS contains a separate pyrolysis model that was developed specifically for vegetation~\cite{Porterie:2006,Morvan:CF2004,Houssami:2016}. The solid-phase thermal degradation process consists of three reactions:
+FDS contains an optional pyrolysis model that was developed specifically for vegetation~\cite{Porterie:2006,Morvan:CF2004,Houssami:2016}. The solid-phase thermal degradation process consists of three reactions:
 
 \vspace{\baselineskip}
 
@@ -6514,11 +6545,11 @@ FDS contains a separate pyrolysis model that was developed specifically for vege
 \be
  {\rm Char} + \nu_{\rm O_2, char} \, {\rm O_2} \rightarrow (1+ \nu_{\rm O_2,char} - \chi_{\rm ash}) \, {\rm CO_2} + \chi_{\rm ash} \, {\rm Ash}
 \ee
-$M$ is the vegetation {\em moisture content} or {\em moisture fraction} determined on a dry weight basis. $M$ is related to the mass fraction of water via the relation:
+$M$ is the vegetation {\em moisture content} or {\em moisture fraction} determined on a dry weight basis. $M$ is related to the mass fraction of water within the solid via the relation:
 \be
   Y_{\rm H_2O} = \frac{M}{1+M}
 \ee
-$\chi_{\rm char}$ is the mass fraction of dry vegetation that is converted to char during pyrolysis;  $\nu_{\rm O_2,char}$ is the stoichiometric coefficient of oxygen, based on the assumption that the char is mainly carbon;  and $\chi_{\rm ash}$ is the mass fraction of char that is converted to ash during char oxidation.
+$\chi_{\rm char}$ is the mass fraction of dry vegetation that is converted to char during pyrolysis. It is specified with the parameter {\ct NU\_MATL} on the {\ct MATL} line describing the dry vegetation. The character string {\ct MATL\_ID} on the same {\ct MATL} line indicates the name of the char.  $\nu_{\rm O_2,char}$ ({\ct NU\_O2} on the {\ct MATL} line that defines the char properties) is the mass of oxygen required per unit mass of char consumed. $\chi_{\rm ash}$ ({\ct NU\_MATL} on the {\ct MATL} line describing the char) is the mass fraction of char that is converted to ash during char oxidation.
 
 In the referenced papers~\cite{Porterie:2006,Morvan:CF2004,Houssami:2016}, the reaction rates are written in terms of ``bulk'' quantities. For example,  in the paper by Mell et al.~\cite{Mell:2009}, the mass of dry vegetation per unit volume is denoted $\langle m^{\prime\prime\prime}_{\rm dry}\rangle_{V_{\rm b}}$, where the angled brackets denote the explicit LES filtering over the grid cell volume $V_{\rm b}$. However, in FDS the reaction rates are written in terms of the component densities of the composite solid:
 \be
@@ -6528,12 +6559,12 @@ The initial total density is denoted $\rho_{\rm s}(0)$.
 
 The reaction rates for evaporation of H$_2$O, pyrolysis of the dry vegetation, and char oxidation are:
 \begin{eqnarray}
-  r_{\rm H_2O} &=& \left( \frac{\rho_{\rm s, H_2O}}{\rho_{\rm s}(0)} \right)   \, A_{\rm H_2O} \, T^{-\frac{1}{2}} \exp \left(  -\frac{E_{\rm H_2O}}{R \, T} \right)  \\[.1in]
+  r_{\rm H_2O} &=& \left( \frac{\rho_{\rm s, H_2O}}{\rho_{\rm s}(0)} \right)   \, A_{\rm H_2O} \, T^{-\frac{1}{2}} \exp \left(  -\frac{E_{\rm H_2O}}{R \, T} \right) \label{r_H2O} \\[.1in]
   r_{\rm pyr}  &=& \left( \frac{\rho_{\rm s,dry}}{\rho_{\rm s}(0)}   \right)   \, A_{\rm pyr} \,                   \exp \left(  -\frac{E_{\rm pyr}}{R \, T}  \right)   \\[.1in]
   r_{\rm char} &=& \left( \frac{\rho_{\rm s,char}}{\rho_{\rm s}(0)}  \right)^0 \, A_{\rm char} \,                  \exp \left(  -\frac{E_{\rm char}}{R \, T} \right) \,
-  \frac{ \rho \, Y_{\rm O_2} \, \sigma \, \left( 1+\beta_{\rm char}\sqrt{\RE} \right) }{\nu_{\rm O_2,char} \, \rho_{\rm s}(0)}
+  \frac{ \rho \, Y_{\rm O_2} \, \sigma \, \left( 1+\beta_{\rm char}\sqrt{\RE} \right) }{\nu_{\rm O_2,char} \, \rho_{\rm s}(0)} \label{r_char}
 \end{eqnarray}
-where $T$ is the temperature of the vegetation. The default values of the kinetic constants are given in Table~\ref{tab:veg_kinetics}. The Reynolds number is $\RE = \rho U D_{\rm v} / \mu $ where $\rho$ is the gas density, $U$ is the gas velocity, and $D_{\rm v} = 4/\sigma$ for a cylinder, where $\sigma$ is the surface area to volume ratio. The term containing $\RE$ is included to account for the oxygen blowing effects on char oxidation and the constant $\beta_{\rm char}$ is equal to 0.2 by default, which is the value used by Porterie~et~al.~\cite{Porterie:2006}.
+where $T$ is the temperature of the vegetation. Note that the exponent -1/2 in Eq.~(\ref{r_H2O}) is specified using {\ct N\_T=-0.5} on the {\ct MATL} line for water, and the exponent 0 in Eq.~(\ref{r_char}) is specified using {\ct N\_S=0} on the {\ct MATL} line for the char species. The default values of the kinetic constants are given in Table~\ref{tab:veg_kinetics}. The Reynolds number is $\RE = \rho U D_{\rm v} / \mu $ where $\rho$ is the gas density, $U$ is the gas velocity, and $D_{\rm v} = 4/\sigma$ for a cylinder, where $\sigma$ is the surface area to volume ratio. The term containing $\RE$ is included to account for the oxygen blowing effects on char oxidation and the constant $\beta_{\rm char}$ ({\ct BETA\_CHAR}) is equal to 0.2 by default, which is the value used by Porterie~et~al.~\cite{Porterie:2006}.
 
 \begin{table}[!ht]
 \caption[Default vegetation kinetic constants]{Default vegetation kinetic constants (from Porterie et al.~\cite{Porterie:2006})}
@@ -6558,7 +6589,7 @@ The equation governing the temperature of the solid is
 \label{eq:Tv_thermally_thin}
 \rho_{\rm s} \, c \, \frac{\partial T}{\partial t} = -\rho_{\rm s}(0) \left( \Delta{h_{\rm H_2O}}\ r_{\rm H_2O} + \Delta {h_{\rm pyr}}\ r_{\rm pyr} + \alpha_{\rm char}\ \Delta{h_{\rm char}}\ r_{\rm char} \right) + \nabla \cdot{\mathbf{\dot{q}}}''_{\rm c}  +  \nabla \cdot{\mathbf{\dot{q}}}''_{\rm r}
 \ee
-The non-dimensional weighting parameter, $\alpha_{\rm char}$, is the fraction of the heat generated by heterogeneous char oxidation that is deposited in the fuel element and $(1-\alpha_{\rm char})$ in the gas phase. By default, $\alpha_{\rm char} = 0.5$, which has been used by others (e.g., Porterie~et~al.~\cite{Porterie:2006}). The fourth and fifth terms on the right-hand-side of Eq.~(\ref{eq:Tv_thermally_thin}) are the contributions of convective and radiative heat transfer, respectively~\cite{Mell:2009}. The heats of reaction in Eq.~(\ref{eq:Tv_thermally_thin}) are $\Delta{h_{\rm H_2O}} = 2259$~kJ/kg;  $\Delta{h_{\rm pyr}} = 418$~kJ/kg~\cite{Morvan:CF2001}; $\Delta{h_{\rm char}} = -32000$~kJ/kg~\cite{Dahale:2013}. The specific heat of the composite solid is given by
+The non-dimensional weighting parameter, $\alpha_{\rm char}$ ({\ct ALPHA\_CHAR} on the {\ct MATL} line describing the char), is the fraction of the heat generated by heterogeneous char oxidation that is deposited in the fuel element and $(1-\alpha_{\rm char})$ in the gas phase. A suggested value is $\alpha_{\rm char} = 0.5$, which has been used by others (e.g., Porterie~et~al.~\cite{Porterie:2006}). The fourth and fifth terms on the right-hand-side of Eq.~(\ref{eq:Tv_thermally_thin}) are the contributions of convective and radiative heat transfer, respectively~\cite{Mell:2009}. The heats of reaction in Eq.~(\ref{eq:Tv_thermally_thin}) are $\Delta{h_{\rm H_2O}} = 2259$~kJ/kg;  $\Delta{h_{\rm pyr}} = 418$~kJ/kg~\cite{Morvan:CF2001}; $\Delta{h_{\rm char}} = -32000$~kJ/kg~\cite{Dahale:2013}. The specific heat of the composite solid is given by
 \be
 c = \frac{\sum \rho_{\rm s,\alpha} \, c_\alpha}{\rho_{\rm s}}
 \ee
@@ -6581,7 +6612,7 @@ The rate of change for the components of the vegetative mass during thermal degr
 \end{eqnarray}
 Gaseous products created during the thermal degradation process are water vapor (during evaporation), fuel vapor (during pyrolysis), and CO$_2$ (during char oxidation). The source terms (kg m$^{-3}$ s$^{-1}$) for these species are, respectively, $\rho_{\rm s}(0) \, r_{\rm H_2O}$, $(1-\chi_{\rm char}) \, \rho_{\rm s}(0) \, r_{\rm pyr}$, and  $(1+\nu_{\rm O_2,char} - \chi_{\rm ash}) \, \rho_{\rm s}(0) \, r_{\rm char}$. In addition, the char oxidation process consumes oxygen in the gas phase at a rate of $-\nu_{\rm O_2,char} \, \rho_{\rm s}(0) \, r_{\rm char}$.
 
-Figure~\ref{vege_inputs} includes sample input lines demonstrating how the vegetation model can be applied to particles that represent pine needles that are 1~mm in diameter and 5~cm long. Note that the {\ct MATL} line for char contains the flag {\ct VEGETATION=.TRUE.} to indicate that the special vegetation model is to be invoked. All parameters described above must be explicitly specified in the input file---there are no hard-wired default values.
+Figure~\ref{vege_inputs} includes sample input lines demonstrating how the vegetation model can be applied to particles that represent pine needles that are 1~mm in diameter and 5~cm long. Note that the specification of the parameter {\ct NU\_O2\_CHAR} on the {\ct MATL} line for char indicates that the special vegetation model is to be invoked. All parameters described above must be explicitly specified in the input file---there are no hard-wired default values.
 
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -6609,12 +6640,12 @@ Figure~\ref{vege_inputs} includes sample input lines demonstrating how the veget
       HEAT_OF_REACTION = 418. /
 
 &MATL ID = 'CHAR'
-      VEGETATION = .TRUE.
       DENSITY  = 300.
       CONDUCTIVITY = 0.05
       SPECIFIC_HEAT_RAMP = '...'
       N_S = 0.
-      NU_O2 = 1.65
+      NU_O2_CHAR = 1.65
+      ALPHA_CHAR = 0.5
       BETA_CHAR = 0.2
       A = 430.
       E = 74800.
@@ -6644,7 +6675,7 @@ There are three ways of simulating wildland fire spread.
 \item {\bf Boundary Fuel Model:} Ground vegetation is modeled like a porous solid with a thickness equal to the height of the vegetation.
 \item {\bf Level Set Method:} The fire front propagates using purely empirical rules.
 \end{enumerate}
-Of these, the first two are physics-based; the third empirical.
+The Particle Method and Boundary Fuel Model require thermo-physical properties of the vegetative fuels and the fire spread rate is {\em predicted} by the model. The Level Set Method relies on a set of experimentally-determined spread rates for different types of vegetation and wind speeds.
 
 
 \subsection{Lagrangian Particle Model}
@@ -6764,6 +6795,16 @@ Thermal convection is not imposed at the interface between the gas phase and the
    \langle \dq_{\rm c,b}''' \rangle = \sigma \, \beta \, \dq_{\rm c}''
 \ee
 where $\dq_{\rm c}''$ is given in Eq.~(\ref{q_con}) under the assumption that the subgrid-scale vegetation is cylindrical and the gas velocity and temperature are taken from the first gas phase grid cell adjacent to the boundary.
+
+
+\subsection{Burnout Time}
+\label{veg_burnout_time}
+
+For scenarios where the fire's rate of spread (ROS) is relatively slow and the numerical grid is relatively coarse, the spatial resolution may be inadequate. Consider the simple relationship between the ROS, the width of the fire front, $W$, and the average burn duration of a particular patch of vegetation, $\Delta t_{\rm b}$:
+\be
+   W = {\rm ROS} \times \Delta t_{\rm b}
+\ee
+The more grid cells spanning the front width, the better resolved the simulation. In badly resolved simulations, the time required for the fire to spread the width of a grid cell may be comparable or longer than the burnout time, $\Delta t_{\rm b}$. In such cases, it is necessary to specify an effective ``burnout time'' that accounts for the unresolved burning occurring at sub-grid scales. This parameter, {\ct MINIMUM\_BURNOUT\_TIME} (s), is specified on the {\ct SURF} line that provides parameters for the vegetation. By default, it has a very large value, meaning that it is ignored unless specified.
 
 
 \subsection{Comparing the Particle and Boundary Fuel Models of Vegetation}
@@ -6910,7 +6951,7 @@ All devices must have a specified {\ct QUANTITY}.  Some special devices (Section
 
 
 
-\newpage
+
 
 \section{Special Device Properties: The \texorpdfstring{{\tt PROP}}{PROP} Namelist Group (Table \ref{tbl:PROP})}
 \label{info:PROP}
@@ -7295,8 +7336,13 @@ Creation or removal at a predetermined time can be performed using a {\ct DEVC} 
 \end{lstlisting}
 At the start of the simulation, the purple obstruction is present with a red block embedded in it. This red block is actually a {\ct HOLE} whose initial state is {\ct .FALSE.}, i.e., the hole is filled. Also at the start of the simulation, there is a pink obstruction that is visible. At 1~s the red block disappears. At 2~s the empty hole in the purple obstruction is filled with a green block. This hole was initially true, i.e. empty.  The blue obstruction appears at 3~s because its initial state is false, meaning that it does not exist initially. The pink obstruction disappears at 4~s because its initial state is true and this state changes at 4~s. At 5~s a yellow obstruction appears with one empty hole and one embedded gray block.  At 6~s the gray block disappears because it is a hole that was initially false and therefore was filled with the gray block when its parent obstruction (yellow) was created.  Also at 6~s the hole originally present in the yellow obstruction is filled with a black block because it was a hole that was initially empty and then filled when its {\ct DEVC} changed state.  {\em You should always try a simple example first before embarking on a complicated creation/removal scheme for obstructions and holes.}
 
-To learn how to create and remove obstructions multiple times, see Section~\ref{info:CUSTOM} for information about the custom control feature.
-
+To create and remove obstructions multiple times, either set {\ct LATCH=.FALSE.} together with a cycling math function (see Sec.~\ref{info:FUNCTION_TYPE}), as shown below, or use the {\ct 'CUSTOM'} control feature (see Sec.~\ref{info:CUSTOM}).  The following uses {\ct TIME} as the input to a {\ct SIN} math function .  The sign of the {\ct DEVC} value toggles the state of the {\ct OBST}.
+\begin{lstlisting}
+&DEVC ID='t1', XYZ=..., QUANTITY='TIME', TIME_AVERAGED=F/
+&CTRL ID='s1', FUNCTION_TYPE='SIN', INPUT_ID='t1'/
+&DEVC ID='timer', XYZ=..., QUANTITY='CONTROL VALUE', CTRL_ID='s1', SETPOINT=0, LATCH=F/
+&OBST XB=..., DEVC_ID='timer'/
+\end{lstlisting}
 
 
 \subsection{Activating and Deactivating Vents}
@@ -8518,9 +8564,9 @@ A useful feature of a device ({\ct DEVC}) is to specify an output quantity along
 \begin{lstlisting}
 &DEVC XB=..., QUANTITY='TEMPERATURE', ID='maxT', SPATIAL_STATISTIC='MAX' /
 \end{lstlisting}
-causes FDS to write out the maximum gas phase temperature over the volume bounded by {\ct XB}. Note that it does not compute the maximum over the entire computational domain, just the specified volume, and this volume must lie within a single mesh. Other {\ct SPATIAL\_STATISTIC}'s are discussed below.  Note that some are appropriate for gas phase output quantities, some for solid phase, and some for both.
+causes FDS to write out the maximum gas phase temperature over the volume bounded by {\ct XB}. Note that it does not compute the maximum over the entire computational domain, just the specified volume. Other {\ct SPATIAL\_STATISTIC}'s are discussed below.  Note that some are appropriate for gas phase output quantities, some for solid phase, and some for both.
 
-For solid phase output quantities, like heat fluxes and surface temperatures, the specification of a {\ct SURF\_ID} along with the appropriate statistic limits the calculation to only those surfaces. You can further limit the search by using the sextuplet of coordinates {\ct XB} to force FDS to only compute statistics for surface cells within the given volume. Be careful to account for the fact that the solid surface might shift to conform to the underlying numerical grid. Also, be careful not to specify a volume that extends beyond a single mesh. Note that you do not (and should not) specify an orientation via the parameter {\ct IOR} when using a spatial statistic. {\ct IOR} is only needed to find a specific point on the solid surface.
+For solid phase output quantities, like heat fluxes and surface temperatures, the specification of a {\ct SURF\_ID} along with the appropriate statistic limits the calculation to only those surfaces. You can further limit the search by using the sextuplet of coordinates {\ct XB} to force FDS to only compute statistics for surface cells within the given volume. Be careful to account for the fact that the solid surface might shift to conform to the underlying numerical grid. Note that you do not (and should not) specify an orientation via the parameter {\ct IOR} when using a spatial statistic. {\ct IOR} is only needed to find a specific point on the solid surface.
 
 
 \subsubsection{Minimum or Maximum Value}
@@ -8539,6 +8585,8 @@ If you want to know where the specified {\ct QUANTITY} achieves its minimum or m
 For a gas phase scalar quantity defined at the center of each grid cell, $\phi_{ijk}$, the {\ct SPATIAL\_STATISTIC} {\ct 'MEAN'} computes the average value,
 \be \frac{1}{N} \; \sum_{ijk} \phi_{ijk}  \ee
 over the cells that are included in the specified volume bounded by {\ct XB}. Note that this statistic is only appropriate for gas phase quantities. Note also that you must specify a volume to sum over via the coordinate parameters, {\ct XB}, which can extend into multiple meshes.
+
+If you are interested in the average value over a plane, give the {\ct XB} volume a small thickness to either side of the plane location encompassing the storage locations of the values of interest.  For example, scalars like temperatures live at the cell center, so locate the plane at the cell center and add a small delta to either side of that plane for the {\ct XB}.
 
 \subsubsection{Volume-Weighted Mean}
 
@@ -8715,6 +8763,24 @@ $p_\infty$ is the ambient, or ``free stream'' pressure, and $\rho_\infty$ is the
 &PROP ID='U', CHARACTERISTIC_VELOCITY=3.4 /
 \end{lstlisting}
 Thus, you can either paint values of $C_p$ at all surface points, or create a single time history of $C_p$ using a single device at a single point.
+
+
+\subsubsection{Wall pressure, viscous stresses and integrated forces}
+\label{info:distributed_forces}
+
+If you desire to output the pressure on a point in the wall or viscous stress along the stream-wise direction next to it, you can set devices in the form:
+
+\begin{lstlisting}
+&DEVC ID='WallPressure 1', XYZ=..., IOR=..., QUANTITY='WALL PRESSURE', SURF_ID='MySurf' /
+&DEVC ID='WallStress 1', XYZ=..., IOR=..., QUANTITY='VISCOUS STRESS WALL ', SURF_ID='MySurf' /
+\end{lstlisting}
+
+The corresponding distributed forces at said point, projected in a specified direction, can be obtained adding the field {\ct FORCE\_DIRECTION}. This namelist parameter must define a vector in such direction. You can also integrate these distributed forces to obtain total pressure and viscous forces on a surface. As an example, if you desire to compute total forces on faces with {\ct SURF\_ID='MySurf'}, within a volume {\ct XB=xlo,xhi,ylo,yhi,zlo,zhi} in the $x$ direction, you can add:
+
+\begin{lstlisting}
+&DEVC ID='Pressure Force X', XB=xlo,xhi,ylo,yhi,zlo,zhi, QUANTITY='WALL PRESSURE', SURF_ID='MySurf', SPATIAL_STATISTIC='SURFACE INTEGRAL', FORCE_DIRECTION=1.,0.,0. /
+&DEVC ID='Viscous Force X', XB=xlo,xhi,ylo,yhi,zlo,zhi, QUANTITY='VISCOUS STRESS WALL ', SURF_ID='MySurf', SPATIAL_STATISTIC='SURFACE INTEGRAL', FORCE_DIRECTION=1.,0.,0. /
+\end{lstlisting}
 
 
 \subsection{Dry Volume and Mass Fractions}
@@ -9073,7 +9139,7 @@ Here, the {\ct ID} is just a label in the output file. When an output quantity i
 {\ct LOWER TEMPERATURE}                         & Section~\ref{info:layerheight}                & $^\circ$C      & D            \\ \hline
 {\ct MASS FLOW}                                 & Section~\ref{info:flows}                      & kg/s           & D            \\ \hline
 {\ct MASS FLOW WALL}                            & Section~\ref{info:flows}                      & kg/s           & D            \\ \hline
-{\ct MASS FLUX}$^1$                             & Section~\ref{info:wallflux}                   & \si{kg/(m$^2$.s)} & B,D       \\ \hline
+{\ct MASS FLUX}$^{1,4}$                         & Section~\ref{info:wallflux}                   & \si{kg/(m$^2$.s)} & B,D       \\ \hline
 {\ct MASS FLUX WALL}$^1$                        & Section~\ref{info:wallflux}                   & \si{kg/(m$^2$.s)} & B,D       \\ \hline
 {\ct MASS FLUX X}$^1$                           & $\rho u Y_\alpha$                             & \si{kg/(m$^2$.s)} & D,I,P,S   \\ \hline
 {\ct MASS FLUX Y}$^1$                           & $\rho v Y_\alpha$                             & \si{kg/(m$^2$.s)} & D,I,P,S   \\ \hline
@@ -9117,13 +9183,13 @@ Here, the {\ct ID} is just a label in the output file. When an output quantity i
 {\ct SOLID CELL Q\_S}                           & Section~\ref{info:pyro3d}                     & kW/m$^3$       & D,I,P,S      \\ \hline
 {\ct SOLID CELL VOLUME RATIO}                   & Section~\ref{info:pyro3d}                     & m$^3$/m$^3$    & D,I,P,S      \\ \hline
 {\ct SOLID CONDUCTIVITY}                        & Section~\ref{info:DEPTH}                      & \si{W/(m.K)}   & D            \\ \hline
-{\ct SOLID DENSITY}                             & Section~\ref{info:DEPTH}                      & kg/m$^3$       & D            \\ \hline
+{\ct SOLID DENSITY}$^4$                         & Section~\ref{info:DEPTH}                      & kg/m$^3$       & D            \\ \hline
 {\ct SOLID SPECIFIC HEAT}                       & Section~\ref{info:DEPTH}                      & \si{kJ/(kg.K)} & D            \\ \hline
 {\ct SPECIFIC ENTHALPY}                         & Section~\ref{info:enthalpy}                   & kJ/kg          & D,I,P,S      \\ \hline
 {\ct SPECIFIC HEAT}                             & $c_p$                                         & \si{kJ/(kg.K)} & D,I,P,S      \\ \hline
 {\ct SPECIFIC SENSIBLE ENTHALPY}                & Section~\ref{info:enthalpy}                   & kJ/kg          & D,I,P,S      \\ \hline
 {\ct SPRINKLER LINK TEMPERATURE}                & Section~\ref{info:sprinklers}                 & $^\circ$C      & D            \\ \hline
-{\ct SURFACE DENSITY}                           & Section~\ref{info:material_components}        & kg/m$^2$       & B,D          \\ \hline
+{\ct SURFACE DENSITY}$^4$                       & Section~\ref{info:material_components}        & kg/m$^2$       & B,D          \\ \hline
 {\ct SURFACE DEPOSITION}$^1$                    & Section~\ref{info:deposition}                 & kg/m$^2$       & B,D          \\ \hline
 {\ct TEMPERATURE}                               & Section~\ref{info:THERMOCOUPLE}               & $^\circ$C      & D,I,P,S      \\ \hline
 {\ct THERMOCOUPLE}                              & Section~\ref{info:THERMOCOUPLE}               & $^\circ$C      & D            \\ \hline
@@ -9252,6 +9318,7 @@ be found in Volume~1 of the FDS Technical Reference Guide~\cite{FDS_Math_Guide}.
 %{\ct TOTAL MASS FLUX Y} & $\overline{\rho Y_\alpha} v + \rho D_\alpha \partial Y_\alpha/\partial y$ & kg/s/m$^2$     & D,I,P,S      \\ \hline
 %{\ct TOTAL MASS FLUX Z} & $\overline{\rho Y_\alpha} w + \rho D_\alpha \partial Y_\alpha/\partial z$ & kg/s/m$^2$     & D,I,P,S      \\ \hline
 {\ct VELOCITY ERROR}                            & Section~\ref{info:PRES}                           &                & B            \\ \hline
+{\ct VISCOUS STRESS WALL}                  & Section~\ref{info:distributed_forces}        &    Pa       &  B,D        \\ \hline
 {\ct VISCOUS WALL UNITS}                        & Section~\ref{info:yplus}                          &                & B,D          \\ \hline
 {\ct VN}                                        & Section~\ref{info:TIMING}                         &                & D,I,P,S      \\ \hline
 {\ct VN MAX}                                    & Section~\ref{info:TIMING}                         &                & D            \\ \hline
@@ -9260,6 +9327,7 @@ be found in Volume~1 of the FDS Technical Reference Guide~\cite{FDS_Math_Guide}.
 {\ct VORTICITY Z}                               & $\partial v/\partial x - \partial u/\partial y$   & 1/s            & D,I,P,S      \\ \hline
 %{\ct WALL CELL BOUNDARY TYPE}                   & Index of {\ct WC\%BOUNDARY\_TYPE} for debug       &                & B            \\ \hline
 %{\ct WALL CELL THERMAL BOUNDARY TYPE}           & Index of {\ct SF\%THERMAL\_BC\_INDEX} for debug   &                & B            \\ \hline
+{\ct WALL PRESSURE}                           & Section~\ref{info:distributed_forces} &     Pa                       & B,D         \\ \hline
 {\ct WALL VISCOSITY}                            & Near-wall viscosity, $\mu_w$                      & \si{kg/(m.s)}  & B,D          \\ \hline
 {\ct WAVELET ERROR}$^3$                         & Section~\ref{info:meshquality}                    &                & S            \\ \hline
 \end{longtable}
@@ -9340,6 +9408,7 @@ properties be specified as well. Simply prescribing as many properties as possib
 \hline \hline
 \endhead
 {\ct CELL\_CENTERED}             & Logical     & Section \ref{info:BNDF}                 &           & {\ct .FALSE.}   \\ \hline
+{\ct MATL\_ID}                   & Character   & Section \ref{info:outputquantities}     &           &                 \\ \hline
 {\ct PART\_ID}                   & Character   & Section \ref{info:outputquantities}     &           &                 \\ \hline
 {\ct PROP\_ID}                   & Character   & Section \ref{info:BNDF}                 &           &                 \\ \hline
 {\ct QUANTITY}                   & Character   & Section \ref{info:outputquantities}     &           &                 \\ \hline
@@ -9443,7 +9512,8 @@ properties be specified as well. Simply prescribing as many properties as possib
 \multicolumn{5}{|c|}{{\ct CSVF} (Comma Delimited Output Files)} \\
 \hline \hline
 \endhead
-%{\ct CSVFILE}         & Character      & Section~\ref{info:??}                &            &     \\ \hline
+%{\ct CSVFILE}         & Character      & Section~\ref{info:??}                &            &        \\ \hline
+{\ct PER\_MESH}       & Logical        & Section~\ref{info:velo_restart}      &            & .FALSE. \\ \hline
 {\ct UVWFILE}         & Character      & Section~\ref{info:velo_restart}      &            &     \\ \hline
 \end{longtable}
 
@@ -9518,6 +9588,7 @@ properties be specified as well. Simply prescribing as many properties as possib
 {\ct DUCT\_ID}              & Character       & Section~\ref{info:HVAC}                                         &       &               \\ \hline
 {\ct EVACUATION}            & Logical         & Reference~\cite{FDS_Evac_Users_Guide}                           &       & {\ct .FALSE.} \\ \hline
 {\ct FLOWRATE}              & Real            & Section~\ref{info:aspiration_detector}                          & kg/s  & 0             \\ \hline
+{\ct FORCE\_DIRECTION} & Real(3)     & Section~\ref{info:distributed_forces}                            &          &           \\ \hline
 {\ct HIDE\_COORDINATES}     & Logical         & Section~\ref{info:line_file}                                    &       & {\ct .FALSE.} \\ \hline
 {\ct ID}                    & Character       & Section~\ref{info:DEVC}                                         &       &               \\ \hline
 {\ct INITIAL\_STATE}        & Logical         & Section~\ref{info:basic_control}                                &       & {\ct .FALSE.} \\ \hline
@@ -9726,7 +9797,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct MASS\_FLOW  }              & Real              & Section~\ref{info:HVACduct}                                                   &  kg/s         &                \\ \hline
 {\ct MAX\_FLOW}                 & Real              & Section ~\ref{info:HVACfan}                                                   &  m$^3$/s      &                \\ \hline
 {\ct MAX\_PRESSURE}             & Real              & Section ~\ref{info:HVACfan}                                                   &  Pa           &                \\ \hline
-{\ct N\_CELLS}                  & Integer           & Section~\ref{info:hvacmasstransport}                                          &               &{\ct LENGTH}\(/0.1\)  \\ \hline
+{\ct N\_CELLS}                  & Integer           & Section~\ref{info:hvacmasstransport}                                          &               & 10*{\ct LENGTH} \\ \hline
 {\ct NODE\_ID}                  & Char.~Doublet     & Section~\ref{info:HVACduct}                                                   &               &                \\ \hline
 {\ct PERIMETER}                 & Real              & Section~\ref{info:HVACduct}                                                   &  m            &                \\ \hline
 {\ct RAMP\_ID}                  & Character         & Sections ~\ref{info:HVACduct}, \ref{info:HVACfilter}, \ref{info:HVACfan}      &               &                \\ \hline
@@ -9786,6 +9857,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct PART\_ID}                    & Character         & Section~\ref{info:initial_droplets}           &                &               \\ \hline
 {\ct PARTICLE\_WEIGHT\_FACTOR}    & Real              & Section~\ref{info:initial_droplets}           &                & 1.            \\ \hline
 {\ct RADIUS}                      & Real              & Section~\ref{info:initial_droplets}           & m              &               \\ \hline
+{\ct RAMP\_Q}                     & Character         & Section~\ref{info:init_hrrpuv}                &                &               \\ \hline
 {\ct SHAPE}                       & Character         & Section~\ref{info:initial_droplets}           &                & {\ct 'BLOCK'} \\ \hline
 {\ct SPEC\_ID(N)}                 & Character Array   & Section~\ref{info:INIT}                       &                &               \\ \hline
 {\ct TEMPERATURE}                 & Real              & Section~\ref{info:INIT}                       & \si{\degree C} & {\ct TMPA}    \\ \hline
@@ -9849,38 +9921,42 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 \multicolumn{5}{|c|}{{\ct MATL} (Material Properties)} \\
 \hline \hline
 \endhead
-{\ct A(:)}                          & Real array    & Section~\ref{info:solid_pyrolysis}    &    1/s            &        \\ \hline
-{\ct ABSORPTION\_COEFFICIENT}       & Real          & Section~\ref{info:thermal_properties} &    1/m            & 50000. \\ \hline
-{\ct ALLOW\_SHRINKING}              & Logical       & Section~\ref{info:shrink_swell}       &                   & {\ct.TRUE.} \\ \hline
-{\ct ALLOW\_SWELLING}               & Logical       & Section~\ref{info:shrink_swell}       &                   & {\ct.TRUE.} \\ \hline
-{\ct BOILING\_TEMPERATURE}          & Real          & Section~\ref{info:liquid_fuels}       & $^\circ$C         & 5000.  \\ \hline
-{\ct CONDUCTIVITY}                  & Real          & Section~\ref{info:thermal_properties} & \si{W/(m.K)}      & 0.     \\ \hline
-{\ct CONDUCTIVITY\_RAMP}            & Character     & Section~\ref{info:thermal_properties} &                   &        \\ \hline
-{\ct DENSITY}                       & Real          & Section~\ref{info:thermal_properties} & kg/m$^3$          & 0.     \\ \hline
-{\ct DIFFUSIVITY\_SPEC(:)}          & Real          & Section~\ref{info:pyro3d}             & \si{m^2/2}        &        \\ \hline
-{\ct E(:)}                          & Real array    & Section~\ref{info:solid_pyrolysis}    & J/mol             &        \\ \hline
-{\ct EMISSIVITY    }                & Real          & Section~\ref{info:thermal_properties} &                   & 0.9    \\ \hline
-{\ct GAS\_DIFFUSION\_DEPTH(:) }     & Real array    & Section~\ref{info:solid_pyrolysis}    & m                 & 0.001  \\ \hline
-{\ct HEATING\_RATE(:)}              & Real array    & Section~\ref{info:solid_pyrolysis}    & $^\circ$C/min     & 5.     \\ \hline
-{\ct HEAT\_OF\_COMBUSTION(:,:)}     & Real array    & Section~\ref{info:solid_pyrolysis}    & kJ/kg             &        \\ \hline
-{\ct HEAT\_OF\_REACTION(:)}         & Real array    & Section~\ref{info:solid_pyrolysis}    & kJ/kg             & 0.     \\ \hline
-{\ct ID     }                       & Character     & Section~\ref{info:SURF_MATL_Basics}   &                   &        \\ \hline
-{\ct MATL\_ID(:,:)}                 & Character     & Section~\ref{info:solid_pyrolysis}    &                   &        \\ \hline
-{\ct NU\_MATL(:,:)}                 & Real array    & Section~\ref{info:solid_pyrolysis}    & kg/kg             & 0.     \\ \hline
-{\ct NU\_SPEC(:,:)}                 & Real array    & Section~\ref{info:solid_pyrolysis}    & kg/kg             & 0.     \\ \hline
-{\ct N\_REACTIONS}                  & Integer       & Section~\ref{info:solid_pyrolysis}    &                   & 0      \\ \hline
-{\ct N\_O2(:)}                      & Real array    & Section~\ref{info:solid_pyrolysis}    &                   & 0.     \\ \hline
-{\ct N\_S(:)}                       & Real array    & Section~\ref{info:solid_pyrolysis}    &                   & 1.     \\ \hline
-{\ct N\_T(:)}                       & Real array    & Section~\ref{info:solid_pyrolysis}    &                   & 0.     \\ \hline
-{\ct PCR(:)}                        & Logical array & Section~\ref{info:solid_pyrolysis}    &                   & {\ct.FALSE.}\\ \hline
-{\ct PYROLYSIS\_RANGE(:)}           & Real array    & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         & 80.    \\ \hline
-{\ct REFERENCE\_RATE(:)}            & Real array    & Section~\ref{info:solid_pyrolysis}    & 1/s               &        \\ \hline
-{\ct REFERENCE\_TEMPERATURE(:)}     & Real array    & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         &        \\ \hline
-{\ct SPECIFIC\_HEAT}                & Real          & Section~\ref{info:thermal_properties} & \si{kJ/(kg.K)}    & 0.     \\ \hline
-{\ct SPECIFIC\_HEAT\_RAMP}          & Character     & Section~\ref{info:thermal_properties} &                   &        \\ \hline
-{\ct SPEC\_ID(:,:)}                 & Character     & Section~\ref{info:solid_pyrolysis}    &                   &        \\ \hline
-{\ct THRESHOLD\_SIGN(:)}            & Real array    & Section~\ref{info:solid_pyrolysis}    &                   & 1.0    \\ \hline
-{\ct THRESHOLD\_TEMPERATURE(:)}     & Real array    & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         & -273.15 \\ \hline
+{\ct A(:)}                          & Real array      & Section~\ref{info:solid_pyrolysis}    &    1/s            &        \\ \hline
+{\ct ABSORPTION\_COEFFICIENT}       & Real            & Section~\ref{info:thermal_properties} &    1/m            & 50000. \\ \hline
+{\ct ALLOW\_SHRINKING}              & Logical         & Section~\ref{info:shrink_swell}       &                   & {\ct.TRUE.} \\ \hline
+{\ct ALLOW\_SWELLING}               & Logical         & Section~\ref{info:shrink_swell}       &                   & {\ct.TRUE.} \\ \hline
+{\ct ALPHA\_CHAR(:)}                & Real array      & Section~\ref{vegetation_model}        & kg/kg             & 1.     \\ \hline
+{\ct BETA\_CHAR(:)}                 & Real array      & Section~\ref{vegetation_model}        & kg/kg             & 0.2     \\ \hline
+{\ct BOILING\_TEMPERATURE}          & Real            & Section~\ref{info:liquid_fuels}       & $^\circ$C         & 5000.  \\ \hline
+{\ct CONDUCTIVITY}                  & Real            & Section~\ref{info:thermal_properties} & \si{W/(m.K)}      & 0.     \\ \hline
+{\ct CONDUCTIVITY\_RAMP}            & Character       & Section~\ref{info:thermal_properties} &                   &        \\ \hline
+{\ct DENSITY}                       & Real            & Section~\ref{info:thermal_properties} & kg/m$^3$          & 0.     \\ \hline
+{\ct DIFFUSIVITY\_SPEC(:)}          & Real            & Section~\ref{info:pyro3d}             & \si{m^2/2}        &        \\ \hline
+{\ct E(:)}                          & Real array      & Section~\ref{info:solid_pyrolysis}    & J/mol             &        \\ \hline
+{\ct EMISSIVITY    }                & Real            & Section~\ref{info:thermal_properties} &                   & 0.9    \\ \hline
+{\ct GAS\_DIFFUSION\_DEPTH(:) }     & Real array      & Section~\ref{info:solid_pyrolysis}    & m                 & 0.001  \\ \hline
+{\ct HEATING\_RATE(:)}              & Real array      & Section~\ref{info:solid_pyrolysis}    & $^\circ$C/min     & 5.     \\ \hline
+{\ct HEAT\_OF\_COMBUSTION(:,:)}     & Real array      & Section~\ref{info:solid_pyrolysis}    & kJ/kg             &        \\ \hline
+{\ct HEAT\_OF\_REACTION(:)}         & Real array      & Section~\ref{info:solid_pyrolysis}    & kJ/kg             & 0.     \\ \hline
+{\ct HEAT\_OF\_REACTION\_RAMP(:)}  & Character array & Section~\ref{info:solid_pyrolysis}    &                   &        \\ \hline
+{\ct ID     }                       & Character       & Section~\ref{info:SURF_MATL_Basics}   &                   &        \\ \hline
+{\ct MATL\_ID(:,:)}                 & Character       & Section~\ref{info:solid_pyrolysis}    &                   &        \\ \hline
+{\ct NU\_O2\_CHAR(:)}               & Real array      & Section~\ref{vegetation_model}        & kg/kg             & 0.     \\ \hline
+{\ct NU\_MATL(:,:)}                 & Real array      & Section~\ref{info:solid_pyrolysis}    & kg/kg             & 0.     \\ \hline
+{\ct NU\_SPEC(:,:)}                 & Real array      & Section~\ref{info:solid_pyrolysis}    & kg/kg             & 0.     \\ \hline
+{\ct N\_REACTIONS}                  & Integer         & Section~\ref{info:solid_pyrolysis}    &                   & 0      \\ \hline
+{\ct N\_O2(:)}                      & Real array      & Section~\ref{info:solid_pyrolysis}    &                   & 0.     \\ \hline
+{\ct N\_S(:)}                       & Real array      & Section~\ref{info:solid_pyrolysis}    &                   & 1.     \\ \hline
+{\ct N\_T(:)}                       & Real array      & Section~\ref{info:solid_pyrolysis}    &                   & 0.     \\ \hline
+{\ct PCR(:)}                        & Logical array   & Section~\ref{info:solid_pyrolysis}    &                   & {\ct.FALSE.}\\ \hline
+{\ct PYROLYSIS\_RANGE(:)}           & Real array      & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         & 80.    \\ \hline
+{\ct REFERENCE\_RATE(:)}            & Real array      & Section~\ref{info:solid_pyrolysis}    & 1/s               &        \\ \hline
+{\ct REFERENCE\_TEMPERATURE(:)}     & Real array      & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         &        \\ \hline
+{\ct SPECIFIC\_HEAT}                & Real            & Section~\ref{info:thermal_properties} & \si{kJ/(kg.K)}    & 0.     \\ \hline
+{\ct SPECIFIC\_HEAT\_RAMP}          & Character       & Section~\ref{info:thermal_properties} &                   &        \\ \hline
+{\ct SPEC\_ID(:,:)}                 & Character       & Section~\ref{info:solid_pyrolysis}    &                   &        \\ \hline
+{\ct THRESHOLD\_SIGN(:)}            & Real array      & Section~\ref{info:solid_pyrolysis}    &                   & 1.0    \\ \hline
+{\ct THRESHOLD\_TEMPERATURE(:)}     & Real array      & Section~\ref{info:solid_pyrolysis}    & $^\circ$C         & -273.15 \\ \hline
 \end{longtable}
 
 \vspace{\baselineskip}
@@ -10646,7 +10722,8 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct GEOMETRY}                          & Character       & Section~\ref{info:GEOMETRY}               &                     & {\ct 'CARTESIAN'}       \\ \hline
 {\ct HEAT\_OF\_VAPORIZATION}            & Real            & Section~\ref{info:specified_burning}      & kJ/kg               &                         \\ \hline
 {\ct HEAT\_TRANSFER\_COEFFICIENT}       & Real            & Section~\ref{info:convection}             & \si{W/(m^2.K)}      &                         \\ \hline
-{\ct \footnotesize HEAT\_TRANSFER\_COEFFICIENT\_BACK} & Real            & Section~\ref{info:convection}             & \si{W/(m^2.K)}      &                         \\ \hline
+{\ct \footnotesize
+     HEAT\_TRANSFER\_COEFFICIENT\_BACK} & Real            & Section~\ref{info:convection}             & \si{W/(m^2.K)}      &                         \\ \hline
 {\ct HEAT\_TRANSFER\_MODEL}             & Character       & Section~\ref{info:convection}             &                     &                         \\ \hline
 {\ct HRRPUA}                            & Real            & Section~\ref{info:gas_burner}             & \si{kW/m^2}         &                         \\ \hline
 {\ct HT3D}                              & Logical         & Section~\ref{info:ht3d}                   &                     & {\ct .FALSE.}           \\ \hline
@@ -10664,6 +10741,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct MASS\_TRANSFER\_COEFFICIENT}       & Real            & Section~\ref{info:liquid_fuels}           & m/s                 &                         \\ \hline
 {\ct MATL\_ID(NL,NC)}                   & Char.~Array     & Section~\ref{info:solid_pyrolysis}        &                     &                         \\ \hline
 {\ct MATL\_MASS\_FRACTION(NL,NC)}       & Real Array      & Section~\ref{info:solid_pyrolysis}        &                     &                         \\ \hline
+{\ct MINIMUM\_BURNOUT\_TIME}            & Real            & Section~\ref{veg_burnout_time}            & s                   & 1000000                 \\ \hline
 {\ct MINIMUM\_LAYER\_THICKNESS}         & Real            & Section~\ref{info:solid_phase_stability}  & m                   & 1.E-6                   \\ \hline
 {\ct MLRPUA }                           & Real            & Section~\ref{info:gas_burner}             & \si{kg/(m^2.s)}     &                         \\ \hline
 {\ct MOISTURE\_FRACTION(:)}             & Real Array      & Section~\ref{info:vegetation}             &                     & 0.                      \\ \hline
@@ -10683,6 +10761,7 @@ $\Delta t$={\ct T\_END-T\_BEGIN}
 {\ct RAMP\_PART}                        & Character       & Section~\ref{info:RAMP_Time}              &                     &                         \\ \hline
 {\ct RAMP\_Q}                           & Character       & Section~\ref{info:RAMP_Time}              &                     &                         \\ \hline
 {\ct RAMP\_T}                           & Character       & Section~\ref{info:RAMP_Time}              &                     &                         \\ \hline
+{\ct RAMP\_T\_B}                        & Character       & Section~\ref{info:TMP_INNER}              &                     &                         \\ \hline
 {\ct RAMP\_T\_I}                        & Character       & Section~\ref{info:TMP_INNER}              &                     &                         \\ \hline
 {\ct RAMP\_V}                           & Character       & Section~\ref{info:RAMP_Time}              &                     &                         \\ \hline
 {\ct RAMP\_V\_X}                        & Character       & Section~\ref{info:RAMP_Vel_Prof}          &                     &                         \\ \hline

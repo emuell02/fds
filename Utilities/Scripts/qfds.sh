@@ -120,6 +120,7 @@ function usage {
   echo " -s   - stop job"
   echo " -S   - use startup files to set the environment, do not load modules"
   echo " -r   - append trace flag to the mpiexec call generated"
+  echo " -R   - select resource manager. Currently only responds to input 'SLURM', with default TORQUE, but allows for future expansion"
   echo " -t   - used for timing studies, run a job alone on a node (reserving $NCORES_COMPUTENODE cores)"
   echo " -T type - run dv (development), db (debug), inspect, advise, or vtune version of fds"
   echo "           if -T is not specified then the release version of fds is used"
@@ -147,16 +148,7 @@ fi
 
 #*** define resource manager that is used
 
-if [ "$RESOURCE_MANAGER" == "SLURM" ]; then
-  if [ "$SLURM_MEM" != "" ]; then
-    SLURM_MEM="#SBATCH --mem=$SLURM_MEM"
-  fi
-  if [ "$SLURM_MEMPERCPU" != "" ]; then
-    SLURM_MEM="#SBATCH --mem-per-cpu=$SLURM_MEMPERCPU"
-  fi
-else
-  RESOURCE_MANAGER="TORQUE"
-fi
+
 
 #*** determine platform
 
@@ -218,6 +210,7 @@ iinspectargs=
 vtuneresdir=
 vtuneargs=
 use_config=""
+RESOURCE_MANAGER="TORQUE"
 # the mac doesn't have Intel MPI
 if [ "`uname`" == "Darwin" ]; then
   use_intel_mpi=
@@ -249,7 +242,7 @@ commandline=`echo $* | sed 's/-V//' | sed 's/-v//'`
 
 #*** read in parameters from command line
 
-while getopts 'Ac:Cd:D:e:Ef:hHiILm:MNn:o:O:p:Pq:rsStT:vVw:a:x:' OPTION
+while getopts 'Aa:c:Cd:D:e:Ef:hHiILm:Mn:o:O:p:Pq:R:rsStT:vVw:x:' OPTION
 do
 case $OPTION  in
   A) # used by timing scripts to identify benchmark cases
@@ -338,6 +331,17 @@ case $OPTION  in
    ;;
   r)
    trace="-trace"
+   ;;
+  R)
+   RESOURCE_MANAGER="$OPTARG"
+   if [ "$RESOURCE_MANAGER" == "SLURM" ]; then
+     if [ "$SLURM_MEM" != "" ]; then
+      SLURM_MEM="#SBATCH --mem=$SLURM_MEM"
+     fi
+     if [ "$SLURM_MEMPERCPU" != "" ]; then
+      SLURM_MEM="#SBATCH --mem-per-cpu=$SLURM_MEMPERCPU"
+     fi
+   fi
    ;;
   s)
    stopjob=1
@@ -457,7 +461,7 @@ else
   if [ "$use_inspect" == "1" ]; then
     DB=_inspect
     if [ "$iinspectresdir" != "" ]; then
-    iinspectargs="inspxe-cl -collect ti2 -knob stack-depth=32 -result-dir $iinspectresdir --"
+    iinspectargs="inspxe-cl -collect ti2 -knob stack-depth=32 -s-f $FDSROOT/fds/Build/impi_intel_linux_64_inspect/suppressions/default.sup  -result-dir $iinspectresdir --"
     fi
   fi
   if [ "$use_advise" == "1" ]; then
@@ -581,7 +585,7 @@ fi
 
 if [ "$use_intel_mpi" == "1" ]; then
   if [ "$use_installed" == "1" ]; then
-    MPIRUNEXE=$fdsdir/mpiexec
+    MPIRUNEXE=$fdsdir/INTEL/mpi/intel64/bin/mpiexec
     if [ ! -e $MPIRUNEXE ]; then
       echo "$MPIRUNEXE not found"
       echo "Run aborted"
@@ -710,7 +714,7 @@ else
 
   if [ "$RESOURCE_MANAGER" == "SLURM" ]; then
     QSUB="sbatch -p $queue --ignore-pbs"
-    MPIRUN='srun'
+    MPIRUN='mpiexec'
   fi
 fi
 

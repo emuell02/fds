@@ -7,8 +7,10 @@ function main()
 clear all
 close all
 
+disp('backward_facing_step ...')
+
 expdir = '../../../exp/Backward_Facing_Step/';
-datdir = '../../../out/Backward_Facing_Step/FDS_Output_Files/';
+datdir = '../../../out/Backward_Facing_Step/';
 pltdir = '../../Manuals/FDS_Validation_Guide/SCRIPT_FIGURES/Backward_Facing_Step/';
 
 rkappa = 1/.41;
@@ -85,7 +87,7 @@ sp5 = tight_subplot(1,4, [.01 .01],[.142 .055],[.108 .01]);
 % streamwise data along bottom of channel for determining reattachment location
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-figure(1)
+set(0, 'CurrentFigure', f1)
 
 set(gca,'Units',Plot_Units)
 set(gca,'Position',[Plot_X Plot_Y Plot_Width Plot_Height])
@@ -170,7 +172,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_Cf'])
 % pressure coefficient along bottom of channel
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-figure(2)
+set(0, 'CurrentFigure', f2)
 
 set(gca,'Units',Plot_Units)
 set(gca,'Position',[Plot_X,Plot_Y,Plot_Width,Plot_Height])
@@ -234,7 +236,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_Cp'])
 % wall-normal streamwise velocity profiles
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-hx = figure(3);
+set(0, 'CurrentFigure', f3);
 
 set(gcf,'Visible',Figure_Visibility);
 set(gcf,'Units',Paper_Units);
@@ -257,10 +259,8 @@ for i = 1:4
     j = find(strcmp(D.colheaders,strcat({'U '},x_loc{i})));
     u_data = D.data(I,j);
 
-
-    axes(sp1(i))
+    set(f3,'CurrentAxes',sp1(i))
     H(1)=plot(u_data/U_0,z/h,'ko','markersize',10);
-
     hold on
 
     %%%FDS data%%%
@@ -314,7 +314,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_U'])
 % wall-normal vertical velocity profiles
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-hx = figure(4);
+set(0, 'CurrentFigure', f4);
 
 set(gcf,'Visible',Figure_Visibility);
 set(gcf,'Units',Paper_Units);
@@ -335,7 +335,7 @@ for i = 1:4
     j = find(strcmp(D.colheaders,strcat({'W '},x_loc{i})));
     w_data = D.data(I,j);
 
-    axes(sp2(i))
+    set(f4,'CurrentAxes',sp2(i))
     plot(w_data/U_0,z/h,'ko','markersize',10);
     hold on
 
@@ -391,7 +391,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_W'])
 % wall-normal uu profiles
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-hx = figure(5);
+set(0, 'CurrentFigure', f5);
 
 set(gcf,'Visible',Figure_Visibility);
 set(gcf,'Units',Paper_Units);
@@ -414,7 +414,7 @@ for i = 1:4
 
     error = uu_data * .15 / U_0^2;
 
-    axes(sp3(i))
+    set(f5,'CurrentAxes',sp3(i))
     plot(uu_data/U_0^2,z/h,'ko','markersize',10);
     hold on
     %herrorbar(uu_data/U_0^2,z/h, error,'ko');
@@ -470,7 +470,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_uu'])
 % wall-normal ww profiles
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-hx = figure(6);
+set(0, 'CurrentFigure', f6);
 
 set(gcf,'Visible',Figure_Visibility);
 set(gcf,'Units',Paper_Units);
@@ -493,7 +493,7 @@ for i = 1:4
 
     error = ww_data * .15 / U_0^2;
 
-    axes(sp4(i))
+    set(f6,'CurrentAxes',sp4(i))
     plot(ww_data/U_0^2,z/h,'ko','markersize',10);
     hold on
     %herrorbar(ww_data/U_0^2,z/h,error,'ko');
@@ -550,7 +550,7 @@ print(gcf,'-dpdf',[pltdir,'backward_facing_step_ww'])
 % wall-normal uw profiles
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-hx = figure(7);
+set(0, 'CurrentFigure', f7);
 
 set(gcf,'Visible',Figure_Visibility);
 set(gcf,'Units',Paper_Units);
@@ -572,7 +572,7 @@ for i = 1:4
 
     error = uw_data * .15 / U_0^2;
 
-    axes(sp5(i))
+    set(f7,'CurrentAxes',sp5(i))
     h_dat=plot(uw_data/U_0^2,z/h,'ko','markersize',10);
     hold on
     %herrorbar(uw_data/U_0^2,z/h,error,'ko');

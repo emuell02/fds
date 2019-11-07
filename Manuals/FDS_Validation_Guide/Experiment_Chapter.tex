@@ -239,6 +239,20 @@ Petra Andersson and Patrick Van Hees of the Swedish National Testing and Researc
 \end{enumerate}
 
 
+
+\section{Crown Fires}
+\label{Crown_Fires_Description}
+
+The term ``crown fire'' refers to a wildfire that spreads from the ground surface into the tree canopy. Alexander and Cruz~\cite{Alexander:CJFR2006} compiled a data set of 57 crown fires that occurred in the U.S. and Canada between 1965 and 2003. For each fire, the relative humidity, ambient temperature, and dominant vegetation type are reported, along with estimated values for the vegetation moisture content, crown bulk density (CBD), and open 10~m wind speed. The vegetation consists mainly of coniferous trees, like pines and spruces, and dry undergrowth and ground cover, i.e. scrub brush and dry pine needles. The reported relative humidity ranges between 5~\% and 50~\%, the estimated moisture content ranges between 5~\% and 10~\%, the estimated CBD ranges between 0.1~kg/m$^3$ and 0.2~kg/m$^3$, the estimated wind speed ranges between 10~km/h and 50~km/h, and the observed rate of spread ranges between 10~m/min and 110~m/min.
+
+\subsubsection{Modeling Notes}
+
+It is not possible to compare directly the model simulations with the observed fires because of lack of information about the number, spacing, and height of the trees; and the depth, mass, and composition of the ground cover. Instead, Ziegler~et~al.~\cite{Ziegler:thesis,Ziegler:FEM2017,Ziegler:Data2019,Hoffman:FT2016} developed tree maps based on various forests found in the western region of the U.S. The maps contain the location and rough dimensions of each tree in a 4~ha area. Eight maps were developed based on four specific locations and pre- or post-treated conditions. In addition, Ziegler~et~al. suggest that the moisture content of the trees is approximately 100~\%, and the ground cover 5~\%. The simulated fires are ignited along a strip, and the rate of spread is calculated based on the position of peak temperature. 
+
+The simulations are performed with a numerical grid that has a resolution of 1~m by 1~m by 0.5~m near the ground, and the vertical dimension increases gradually with height. Because of this relatively coarse resolution, the burning rate of the vegetation is limited to ensure that any given patch of surface vegetation or volume of canopy vegetation cannot burn completely in less than 30~s. 
+
+
+
 \section{CSIRO Grassland Fires}
 \label{CSIRO_Grassland_Fires_Description}
 
@@ -246,7 +260,9 @@ In July and August of 1986, the Commonwealth Scientific and Industrial Research 
 
 \subsubsection{Modeling Notes}
 
-Two of these experiments were simulated with FDS by Mell~et~al.~\cite{Mell:IJWF2007}. Measured properties for the specific types of grasses burned in the two experiments are listed in Table~\ref{Properties_Grasses}. Properties that were not measured are listed in Table~\ref{Assumed_Properties_Grasses}. These assumed properties are typically for wood or cellulosic fuels. The moisture is modeled as water. The grass is assumed to be composed primarily of cellulose.
+Two of these experiments are simulated with FDS by Mell~et~al.~\cite{Mell:IJWF2007}. The grass is modeled as a collection of cylindrical Lagrangian particles. The pyrolysis model assigned to the particles is described in the FDS User's Guide~\cite{FDS_Users_Guide}, chapter ``Earth, Wind and Fire,'' section ``Thermal Degradation Model for Vegetation.''
+
+Measured properties for the specific types of grasses burned in the two experiments are listed in Table~\ref{Properties_Grasses}. Properties that were not measured are listed in Table~\ref{Assumed_Properties_Grasses}. These assumed properties are typically for wood or cellulosic fuels. The moisture is modeled as water. The grass is assumed to be composed primarily of cellulose.
 
 \begin{figure}[ht]
 \includegraphics[width=\textwidth]{FIGURES/CSIRO_Grassland_Fires/Case_F19_0358.png}
@@ -394,6 +410,36 @@ The single level structure was instrumented with five bare-bead thermocouple arr
 \label{fig:west_instrumentation}
 \end{figure}
 
+\section{Droplet Evaporation}
+\label{Droplet_Evaporation_Description}
+
+Five sets of experiments have been selected for validation of the evaporation of liquid droplets.
+
+\subsubsection{Fujita, Kurose, and Komori Experiments}
+\label{Fujita_exp}
+
+Fujita, Kurose, and Komori performed a series of experiments that suspended a water drop in a heated, vertical wind tunnel~\cite{Fujita}. Four experiments were modeled with relative humidity values of 0~\% and 30~\% and droplet Reynolds numbers of 60 and 150 (approximately 0.8~m/s and 2.0~m/s). Droplet size and surface temperature were recorded as functions of time.
+
+\subsubsection{Gavin Experiments}
+\label{Gavin_exp}
+
+Gavin performed two experiments of a single water drop falling in dry air~\cite{Gavin}. The test apparatus was a vertical wind tunnel. A drop was injected into the wind tunnel and the vertical air stream velocity was changed over time to maintain the drop at a constant elevation in the wind tunnel. The first droplet was 769~$\mu$m with an initial temperature of 23.0~$^\circ$C. The second droplet was 557~$\mu$m with an initial temperature of 24.3~$^\circ$C.
+
+\subsubsection{Kolaitis and Founti Experiments}
+\label{Kolaitis_exp}
+
+Kolaitis and Founti measured the diameter and temperature of suspended liquid fuel droplets in a heated air stream~\cite{Kolaitis}. Four experiments were chosen: a 1.26~mm droplet of ethanol at an initial temperature of 34.2~$^\circ$C in 94~$^\circ$C quiescent air, a 1.13~mm droplet of decane at an initial temperature of 73.8~$^\circ$C in 94~$^\circ$C quiescent air, a 1.15~mm droplet of heptane at an initial temperature of 49.0~$^\circ$C in 94~$^\circ$C quiescent air, and a 1.42~mm droplet of heptane at an initial temperature of 15.5~$^\circ$C in 94~$^\circ$C air at 0.146~m/s.
+
+\subsubsection{Maqua, Castanet, and Lemoine Experiments}
+\label{Maqua_exp}
+
+Maqua, Castanet, and Lemoine measured the temperature of falling droplets of ethanol and acetone mixtures in a heated plume~\cite{Maqua}. Because the temperature and velocity of the plume was not well-characterized, only the experiments involving a droplet falling in quiescent air were modeled. As FDS does not currently have a sub-model for the evaporation of a multi-component fuel, only the experiments for a pure ethanol droplet (140~$\mu$m) and a pure acetone droplet (140~$\mu$m) were modeled. The initial droplet temperature in both experiments was 45~$^\circ$C in 20~$^\circ$C air.
+
+\subsubsection{Taflin Experiments}
+\label{Taflin_exp}
+
+Taflin measured the diameter of suspended water droplets in dry air~\cite{Snegirev:1}. One droplet was initially 43.9~$\mu$m and the other was 56.6~$\mu$m.
+
 \section{FAA Cargo Compartments}
 \label{FAA_Cargo_Description}
 
@@ -441,7 +487,13 @@ The FDS model of the facility makes use of the screen drag model for Lagrangian 
 \section{FM Parallel Panel Experiments}
 \label{FM_Parallel_Panel_Description}
 
-Patricia Beaulieu of Worcester Polytechnic Institute made heat flux measurements within a set of vertical parallel panels as part of a cooperative research program between Worcester Polytechnic Institute and FM Global (Factory Mutual)~\cite{Beaulieu:FM}. The experimental apparatus consisted of two vertical parallel panels, 2.4~m high and 0.6~m wide, with a sand burner at the base. The objective of the project was to measure the flame spread rate over various composite wall lining materials, but there were also experiments conducted with inert walls for the purpose of measuring the heat flux from fires fueled by propane and propylene at heat release rates of 30~kW, 60~kW, and 100~kW.
+Patricia Beaulieu of Worcester Polytechnic Institute made heat flux measurements within a set of vertical parallel panels as part of a cooperative research program between Worcester Polytechnic Institute and FM Global (Factory Mutual)~\cite{Beaulieu:FM}. The experimental apparatus consisted of two vertical parallel panels, 2.4~m high and 0.6~m wide, with a sand burner at the base. The objective of the project was to measure the flame spread rate over various composite wall lining materials, but there were also experiments conducted with inert walls for the purpose of measuring the heat flux from fires fueled by propane and propylene at heat release rates of 30~kW, 60~kW, and 100~kW. A sketch of the apparatus is shown in Fig.~\ref{Parallel_Panel_Sketch}.
+
+\begin{figure}[!ht]
+\includegraphics[width=\textwidth]{FIGURES/FM_Parallel_Panel/Full_Assembly}
+\caption[Sketch of the FM parallel panel apparatus]{Sketch of the FM parallel panel apparatus.}
+\label{Parallel_Panel_Sketch}
+\end{figure}
 
 
 
@@ -838,6 +890,51 @@ In December 2018, three fire experiments were conducted in a compartment approxi
 
 In 2009, Mell et~al. measured the burning rate of individual Douglas fir trees of various sizes and moisture contents~\cite{Mell:2009}. Nine of the trees were approximately 2~m tall, and three were approximately 5~m tall. The results were presented as averages: the three 5~m trees had an average moisture content of 26~\%, three of the 2~m trees had an average moisture content of 49~\%, and the remaining six 2~m trees had a moisture content of 14~\%. The 2~m trees were ignited with a natural gas ring burner with a diameter of 80~cm and a heat release rate of 30~kW. The trees with a moisture content of 14~\% were exposed to the burner for 10~s and the 49~\% trees were exposed for 30~s. The 5~m trees were exposed to a hexagonal burner with a span of 122~cm and HRR of 130~kW for 30~s.
 
+\subsubsection{Modeling Notes}
+
+The trees are modeled as a collection of cylindrical Lagrangian particles. Mell~et~al.~\cite{Mell:2009} group the particles into three size classes. The pyrolysis model assigned to the particles is described in the FDS User's Guide~\cite{FDS_Users_Guide}, chapter ``Earth, Wind and Fire,'' section ``Thermal Degradation Model for Vegetation.''
+
+Measured properties of the trees are listed in Table~\ref{Properties_Trees}. Generic vegetation properties are listed in Table~\ref{Assumed_Properties_Trees}. These assumed properties are typically for wood or cellulosic fuels. The moisture is modeled as water. The vegetation is assumed to be composed primarily of cellulose. Reference~\cite{Mell:2009} provides an estimate of the distribution of mass for the foliage, roundwood less than 3~mm in diameter, roundwood 3~mm to 6~mm, and roundwood 6~mm to 10~mm. For the 2~m trees, the distribution is approximately 64~\%, 11~\%, 10~\%, and 15~\%, respectively. For the 5~m trees, it is 60~\%, 17~\%, 12~\%, and 11~\%, respectively.
+
+\begin{table}[ht]
+\begin{center}
+\caption[Measured properties for the NIST Douglas fir trees]{Measured properties for the NIST Douglas fir trees~\cite{Mell:2009}.}
+\label{Properties_Trees}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+Property                                & Units         & Case 1        & Case 2        & Case 3     \\ \hline \hline
+Replicate Experiments                   & --            & 6             & 3             & 3          \\ \hline
+Avg.~Crown Height                       & m             & 1.9           & 1.9           & 4.2        \\ \hline
+Avg.~Base Height                        & m             & 0.15          & 0.15          & 0.3        \\ \hline
+Avg.~Base Width                         & m             & 1.7           & 1.7           & 2.9        \\ \hline
+Foliage Surface Area to Volume Ratio    & m$^{-1}$      & 3940          & 3940          & 3940       \\ \hline
+Avg.~Initial Mass                       & kg            & 9.7           & 13.5          & 57.9       \\ \hline
+Avg.~Moisture Fraction                  & \%            & 14            & 49            & 26         \\ \hline
+Assumed Bulk Mass per Unit Volume       & kg/m$^3$      & 3.2           & 4.6           & 2.7        \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table}
+\begin{center}
+\caption[Assumed properties for the vegetation]{Assumed properties for the vegetation. Note that the Pyrolysis Temperature is taken to be the temperature at which the mass loss rate peaks in the TGA experiments of Morvan and Dupuy~\cite{Morvan:CF2004}.}
+\label{Assumed_Properties_Trees}
+\begin{tabular}{|l|c|c|c|}
+\hline
+Property                        & Units                 & Value                     & Reference                             \\ \hline \hline
+Chemical Composition            & --                    & C$_6$H$_{10}$O$_5$        & Assumption, Cellulose                 \\ \hline
+Heat of Combustion              & kJ/kg                 & 17700                     & \cite{Susott:FS1982}                  \\ \hline
+Soot Yield                      & kg/kg                 & 0.015                     & \cite{SFPE:Tewarson}                  \\ \hline
+Char Yield                      & kg/kg                 & 0.26                      & \cite{Susott:FS1982}                  \\ \hline
+Specific Heat                   & kJ/(kg$\cdot$K)       & 1.2                       & Various sources                       \\ \hline
+Conductivity                    & W/(m$\cdot$K)         & 2                         & Assumption                            \\ \hline
+Density                         & kg/m$^3$              & 514                       & \cite{Rothermel:1972}                 \\ \hline
+Heat of Pyrolysis               & kJ/kg                 & 418                       & \cite{Morvan:CF2004}                  \\ \hline
+Pyrolyis Temperature            & $^\circ$C             & 200                       & \cite{Morvan:CF2004}                  \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
 
 \section{NIST Enclosure Experiments}
 \label{NIST_Enclosure_Description}
@@ -1016,7 +1113,7 @@ All of the fires were fueled by one or more 30.5~cm (1~ft) square natural gas bu
 
 \subsection{Wall and Corner Effects}
 
-Six large compartment experiments were conducted in July, 2017, where four natural gas burners were positioned (1) in a corner and (2) against a wall, and then moved outward in stages until the corner or wall effect became negligible. The quad burner was 60~cm by 60~cm and the burner surface was 54~cm above the floor. The corner fire was located in the southwest corner of the large compartment. The wall fire was centered on the south (long) wall.
+Six large compartment experiments~\cite{McGrattan:TN1984} were conducted in July, 2017, where four natural gas burners were positioned (1) in a corner and (2) against a wall, and then moved outward in stages until the corner or wall effect became negligible. The quad burner was 60~cm by 60~cm and the burner surface was 54~cm above the floor. The corner fire was located in the southwest corner of the large compartment. The wall fire was centered on the south (long) wall.
 
 The experiments began with the quad burner in the corner or against the wall for the first 30~min. At 30~min, the burner was moved so that its edge(s) was 10~cm away from the wall(s). It remained for 15~min, after which it was moved to 20~cm, 30~cm, 50~cm, 100~cm, and 160~cm, each time remaining 15~min for a total experiment time of 2~h.
 
@@ -1148,10 +1245,53 @@ Test   & Cabinet    & Front Door & Top Vents        & Upper Side Vents          
 \end{table}
 
 
-
-
-
 \FloatBarrier
+
+\section{NIST/NRC Parallel Panel Experiments}
+\label{NIST_NRC_Parallel_Panels_Description}
+
+As part of a Nuclear Regulatory Commission (NRC) research project to assess fire behavior in electrical enclosures, rate of spread and heat release rate measurements were made on various plastics lining a parallel panel apparatus. The panels were 0.6~m (2~ft) wide, 2.4~m (8~ft) tall, and separated by 0.3~m (1~ft). A 60~kW propane sand burner was positioned at the base of the two panels. Plastics tested to date include PMMA, PVC, and PBT, cut into 6.4~mm (0.25~in) thick panels. A sketch of the apparatus, originally developed by Factory Mutual, is shown in Fig.~\ref{Parallel_Panel_Sketch}.
+
+
+
+\section{NIST Pool Fire Experiments}
+\label{NIST_Pool_Fires_Description}
+
+The NIST Pool Fire Experiments include temperature, species concentration, and heat flux measurements of 30~cm and 100~cm diameter circular liquid fuel fires.
+
+The 30~cm burner is 15~cm deep and has a wall thickness of 1.6~mm. The burner is fitted with legs such that the burner rim is positioned 30~cm above the floor. The bottom of the burner is maintained at a constant temperature by flowing tap water (nominally 20~$^\circ$C) through a 3~cm section on the bottom of the fuel pan. The dimensions of the circular burner are similar to Weckman's methanol experiment described in Section~\ref{Waterloo_Methanol_Description}.
+
+The 100~cm burner is also 15~cm deep, has a wall thickness of 1.6~mm, and is water-cooled.
+
+\subsubsection{Temperature Measurements}
+
+Hamins and Lock~\cite{Hamins:TN1928} made mean and rms centerline and radial gas temperature measurements for a 30~cm methanol pool fire. The radial measurements were made at heights of 3, 30, 40, 50, and 60~cm.
+
+Sung et al.~\cite{Sung:TN2019} made mean and rms centerline and radial gas temperature measurements for a 100~cm methanol pool fire. The radial measurements were made at heights of 20, 60, 100, 140, and 180~cm.
+
+\subsubsection{Gas Species Measurements}
+
+Falkenstein-Smith et al. measured the time-averaged centerline species concentrations within the flaming region of three liquid fuel fires---acetone, ethanol, and methanol~\cite{Falkenstein-Smith:2019}. The measurements were made using a gas chromatograph/mass spectrometer system (GC/MSD). The volume fraction of each species was calculated via the number of moles identified by the GC/MSD at each centerline point. Soot mass fractions were measured during the gas sampling process.
+
+\subsubsection{Heat Flux Measurements}
+
+Radiative and total heat flux measurements were made at various locations for the 30~cm and 100~cm methanol pool fires.
+\begin{itemize}
+\item Kim et al.~\cite{Kim:FSJ2019} made total heat flux measurements along a radial profile extending 1.5~m outwards from the center of the 30~cm methanol fire.
+\item Hamins et al.~\cite{Hamins:CST1994} made radiative heat flux measurements along a radial profile extending from the pool center to the outer rim of the 30~cm methanol fire.
+\item Klassen et al.~\cite{Klassen:GCR1994} and Kim et al.~\cite{Kim:FSJ2019} made radiative heat flux measurements along a radial profile extending outwards from the outer rim of the 30~cm methanol fire.
+\item Kim et al.~\cite{Kim:FSJ2019} made total heat flux measurements along a vertical profile 60~cm from the center of the 30~cm methanol fire.
+\item Sung et al.~\cite{Sung:TN2019} made total heat flux measurements along a radial profile extending from outer rim to 2~m, and at various heights and distances from center of the 100~cm methanol fire.
+\end{itemize}
+
+\subsubsection{Modeling Notes}
+
+The 30~cm pool fires are modeled at three different grid resolutions---2~cm, 1~cm, and 0.5~cm. The 100~cm pool fires are modeled at 4~cm, 2~cm, and 1~cm resolution. The mass loss rate of the fuel is specified.
+
+A two-step reaction mechanism is implemented. In the first reaction, fuel is converted to CO, soot, H$_2$, and H$_2$O. In the second reaction, the CO, soot, and H$_2$ are converted to CO$_2$ and H$_2$O. Both reactions employ fast kinetics, but proceed in series, not in parallel. The relative amounts of CO, soot, and H$_2$ produced in the first step are still subjects of study, and for the moment have been estimated based on measured results. For example, the methanol fire produces no measurable soot and thus all of the carbon in the fuel molecule is assumed to produce CO in the first step.
+
+The radiative fraction is not specified, but rather predicted using the computed temperature and radiative properties computed by RadCal.
+
 
 \section{NIST Smoke Alarm Experiments}
 \label{NIST_Smoke_Alarm_Description}
@@ -2066,6 +2206,40 @@ The U.S. Coast Guard sponsored a series of experiments to assess the fire suppre
 
 The U.S. Forest Service and collaborators from the University of New South Wales, Australia, conducted 354 fire experiments in a wind tunnel with a cross section of 3~m by 3~m~\cite{Catchpole:CST1998}. The tunnel is part of the Intermountain Fire Sciences Laboratory in Missoula, Montana. The fires involved four different fuel species, a range of fuel bed depths, packing ratios, moisture contents and wind speeds. The fuels were regular and coarse excelsior ({\em Populus tranulos}), and pine needles and heartwood sticks ({\em Pinus ponderosa}). The vegetation was placed in a 1~m wide and 8~m long tray. An approximately 5~cm wide tray of ethanol liquid was positioned at one end, and the fire spread rate was measured using photocells and video analysis.
 
+\subsubsection{Modeling Notes}
+
+The vegetation is modeled as a collection of cylindrical Lagrangian particles. The pyrolysis model assigned to the particles is described in the FDS User's Guide~\cite{FDS_Users_Guide}, chapter ``Earth, Wind and Fire,'' section ``Thermal Degradation Model for Vegetation.''
+
+
+\section{USFS/Corsica Experiments}
+\label{USFS_Corsica_Description}
+
+Perez-Ramirez et al.~at the University of Corsica, France, and Mell at the U.S. Forest Service's Pacific Wildland Fire Science Laboratory in Seattle, Washington, simulated six bench-scale fires spreading over a 1~m wide by 2~m long bed of pine needles~\cite{Perez-Ramirez:FT2017}. The heat release rates from the spreading fires were measured in a furniture calorimeter. The fuel beds were made up of {\em Pinus pinaster} needles, and three different fuel loadings (0.6, 0.9 and 1.2 kg/m$^2$) were tested under no-slope and up-slope conditions (20$^\circ$).
+
+\subsubsection{Modeling Notes}
+
+The pine needles are modeled as a collection of cylindrical Lagrangian particles. The pyrolysis model assigned to the particles is described in the FDS User's Guide~\cite{FDS_Users_Guide}, chapter ``Earth, Wind and Fire,'' section ``Thermal Degradation Model for Vegetation.''
+
+The test parameters are given in Table~\ref{Corsica_Parameters}.
+
+\begin{table}[ht!]
+\begin{center}
+\begin{tabular}{|l|c||c|c|c|c|}
+\hline
+Eexperiment  & Dry Fuel Loading (kg/m$^2$)  	& Slope ($^\circ$)	& Dry Mass per Volume (kg/m$^3$) & Packing Ratio & Bed Depth (cm)	\\ \hline \hline
+1\_0         & 0.6                          	& 0             	& 17                             & 0.033         & 3.5          	\\ \hline
+2\_0         & 0.9                          	& 0             	& 16                             & 0.031         & 5.5          	\\ \hline
+3\_0         & 1.2                          	& 0             	& 18                             & 0.035         & 6.5          	\\ \hline
+1\_20        & 0.6                          	& 20             	& 17                             & 0.033         & 3.5          	\\ \hline
+2\_20        & 0.9                          	& 20             	& 16                             & 0.031         & 5.5          	\\ \hline
+3\_20        & 1.2                          	& 20             	& 18                             & 0.035         & 7.5          	\\ \hline
+\end{tabular}
+\end{center}
+\caption[Test matrix for the USFS/Corsica Experiments]
+{Test matrix for the USFS/Corsica Experiments.}
+\label{Corsica_Parameters}
+\end{table}
+
 
 
 \section{USN High Bay Hangar Experiments}
@@ -2308,6 +2482,7 @@ Table~\ref{Test_Parameters} presents a summary of all the experiments described 
 Arup Tunnel         & 5344          & 1.6           & 7     & 1.5               & 0.8                 & 0.0           & 1.1         & 43          & 0.0 -- 1.1            & N/A                   \\ \hline
 ATF Corridors       & 50 -- 500     & 0.5           & 2.4   & 0.3 -- 3.3        & 0.3 -- 0.9          & 0.0 -- 0.1    & 0.8         & 7.1         & 0.8 -- 6.0            & N/A                   \\ \hline
 Beyler Hood         & 8 -- 30       & 0.2           & 0.5   & 0.5 -- 1.1        & 0.7 -- 1.3          & 0.2 -- 1.7    & 2.0         & 2.0         & N/A                   & N/A                   \\ \hline
+Bittern Sprinklers  & 150           & 0.5           & 2.4   & 0.8               & 0.5                 & 0.04          & 1.7         & 3.3         & 0.8                   & N/A                   \\ \hline
 Bryant Doorway      & 34 -- 511     & 0.3           & 2.4   & 0.5 -- 6.9        & 0.2 -- 1.0          & 0.0 -- 0.2    & 1.0         & 2.1         & 0.6 -- 0.8            & N/A                   \\ \hline
 DelCo Trainers      & 440 -- 1190   & 0.7 -- 1.2    & 2.4   & 0.7 -- 1.0        & 0.8 -- 1.1          & 0.1 -- 0.3    & 1.5         & 2.5         & 0.4 -- 3.8            & N/A                   \\ \hline
 FAA Cargo           & 5             & 0.1           & 1.4   & 1.4               & 0.2                 & 0.2           & 2.3         & 4.8         & 0.1 -- 4.8            & N/A                   \\ \hline
@@ -2320,6 +2495,7 @@ Heskestad           & $10^2-10^7$   & 1.1           & Open  & $10^{-1}-10^4$    
 LLNL Enclosure      & 50 -- 400     & 0.6           & 4.5   & 0.2 -- 1.5        & 0.1 -- 0.4          & 0.1 -- 0.4    & 0.9         & 1.3         & 0.3 -- 1.0            & N/A                   \\ \hline
 McCaffrey Plume     & 14 -- 57      & 0.3           & Open  & 0.2 -- 0.8        & Open                & Open          & Open        & Open        & N/A                   & N/A                   \\ \hline
 NBS Multi-Room      & 110           & 0.3           & 2.4   & 1.5               & 0.5                 & 0.0           & 1.0         & 5.1         & N/A                   & N/A                   \\ \hline
+NIST Composite Beam & 4000          & 1.4           & 3.7   & 0.5               & 0.7                 & 0.6           & 0.5         & 3.5         & N/A                   & N/A                   \\ \hline
 NIST FSE            & 100 -- 2500   & 0.6 -- 1.1    & 2.4   & 0.5 -- 1.8        & 0.4 -- 1.7          & 0.2 -- 5.9    & 1.0         & 1.5         & 0.4 -- 0.8            & N/A                   \\ \hline
 NIST/NRC            & 350 -- 2200   & 1.0           & 3.8   & 0.3 -- 2.0        & 0.3 -- 1.0          & 0.0 -- 0.3    & 1.9         & 5.7         & 0.3 -- 2.1            & 2.0 -- 4.0            \\ \hline
 NIST/NRC Cabinet    & 200 -- 400    & 0.3 -- 0.5    & 2.1   & 0.3 -- 3.7        & 0.2 -- 0.9          & 1.3 -- 12     & 0.3         & 0.4         & N/A                   & 1.2 -- 2.0            \\ \hline
