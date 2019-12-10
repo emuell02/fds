@@ -3387,7 +3387,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
             SF => SURFACE(SURF_INDEX)
             LP => LAGRANGIAN_PARTICLE(PART_INDEX)
             !rm Remove 
-            IF ((ML%NU_O2(J)<=0._EB)) THEN
+            IF ((ML%NU_O2_CHAR(J)<=0._EB)) THEN
                IF (RHO_S(N) <= 0.001_EB*SF%RHO_0(1,N)) THEN
                   RHO_S(N) = 0.0_EB
                   DEALLOCATE(NUADJ)
@@ -3502,7 +3502,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Tech Guide: Sum over the materials, alpha
 
       ! Calculate various energy and mass source terms
       ! heat of reaction except for smoldering veg
-      IF (ML%PYROLYSIS_MODEL /= PYROLYSIS_VEGETATION .OR. (ML%NU_O2(J)<=0._EB) ) THEN
+      IF (ML%PYROLYSIS_MODEL /= PYROLYSIS_VEGETATION .OR. (ML%NU_O2_CHAR(J)<=0._EB) ) THEN
          Q_DOT_S_PPP = Q_DOT_S_PPP - RHO_DOT * ML%ALPHA_CHAR(J)*H_R  ! Tech Guide: q_dot_s,c'''
          Q_DOT_G_PPP = Q_DOT_G_PPP - RHO_DOT * (1._EB-ML%ALPHA_CHAR(J))*H_R
       ENDIF
