@@ -118,13 +118,6 @@ Most simple LES subgrid closures take production of subgrid kinetic energy to be
 \end{align}
 Using a model kinetic energy spectrum (see \cite{Pope:2000}), Eq.~(\ref{eqn_ke_dissipation}) can be used to derive theoretical values for model constants, such as the Smagorinsky constant, discussed below.  See Appendix \ref{app:lilly_analysis}.
 
-\subsection{Wind Fields via Mean Forcing or Nudging}
-
-A common technique used in data assimilation referred to as mean forcing or {\em nudging} is applied to model wind fields~\cite{Kalnay:2003}. Given a vertically and temporally varying wind field, $\bu_\infty(z,t)$, that is assumed to apply to the entire computational domain, a forcing term is added to the momentum equation:
-\be
-   \frac{\partial \bu}{\partial t} = \ldots + \frac{\bu_\infty - \overline{\bu}}{\tau}
-\ee
-where $\overline{\bu}$ is the average velocity vector over a particular horizontal slice of the atmosphere (typically a single horizontal row of grid cells). The relaxation time scale, $\tau$, is chosen by the user such that the computed velocity field faithfully follows the specified wind field. In cases where the wind is steady, the value of $\tau$ can be fairly large and hence the forcing term fairly small. However, if the wind field fluctuates rapidly in time, the value of $\tau$ needs to be chosen based on some trial and error.
 
 \newpage
 \section{Models for the Turbulent Viscosity}
@@ -203,22 +196,10 @@ The basic idea behind Vreman's model is to expand the velocity field in a Taylor
 
 The model constant may be related to the Smagorinsky constant, $c \approx 2.5 \, C_{\rm s}^2$.  Since Vreman's model is most applicable to high resolution cases, we base the coefficient off of $C_{\rm s} = 0.17$, which yields accurate results for highly resolved decaying isotropic turbulence (see the FDS Verification Guide \cite{FDS_Verification_Guide}).  The default Vreman constant is therefore set to $c = 0.07$.
 
-\subsection{Renormalization Group (RNG) Model}
-\label{sec:rng}
-
-Renormalization group (RNG) theory \cite{Yakhot:1989} may be used to derive an effective eddy viscosity, $\mu_{\si{eff}} = \mu + \mu_t$, given by the cubic expression:
-\begin{equation}
-\label{eq:rng}
-\mu_{\si{eff}} = \mu\left[1 + H\left( \frac{\mu_s^2 \mu_{\si{eff}}}{\mu^3} - C \right)\right]^{1/3}
-\end{equation}
-Here, $\mu_s$ is the Smagorinsky eddy viscosity (with $C_s=0.2$) and $H(x)$ is the Heaviside function ($H(x)=x$ if $x>0$, $H(x)=0$ if $x\le0$).
-
-For regions of high turbulence intensity ($\mu_t \gg \mu$), RNG recovers the constant coefficient Smagorinsky model.  Unlike constant coefficient Smagorinsky, however, the RNG turns itself off in regions of low turbulence.  The cutoff constant, $C=10$, has been tuned to match the high wavenumber modes in the CBC experiment for the $64^3$ case (see FDS Verification Guide \cite{FDS_Verification_Guide}).
-
 \subsection{Wall-Adapting Local Eddy-viscosity (WALE) Model}
 \label{sec:wale}
 
-The Wall-Adapting Local Eddy-viscosity, or WALE, model of Nicoud and Ducros \cite{Nicoud:1999} was originally conceived as a method for properly scaling the eddy viscosity in the vicinity of a wall.  While the invariant used in the Smagorinsky model $|S|$ is $O(1)$ near a wall, the invariant designed for WALE correctly scales as $O(y^3)$, where $y$ is the distance from the wall.  Thus, the WALE model may be used as an alternative to Van Driest damping near the wall (see Sec.~\ref{sec:wall_damping}).  The dynamic turbulent viscosity is written as follows:
+The Wall-Adapting Local Eddy-viscosity, or WALE, model of Nicoud and Ducros \cite{Nicoud:1999} was originally conceived as a method for properly scaling the eddy viscosity in the vicinity of a wall.  While the invariant used in the Smagorinsky model $|S|$ is $O(1)$ near a wall, the invariant designed for WALE correctly scales as $O(y^3)$, where $y$ is the distance from the wall.  The WALE model is used for the eddy viscosity in the first off-wall grid cell.  The dynamic turbulent viscosity is written as follows:
 \begin{equation}
 \label{eq:wale}
 \mu_{\si{t}} = \rho (C_{\si{w}} \Delta)^2 \frac{(S^d_{ij} S^d_{ij})^{3/2}}{(S_{ij} S_{ij})^{5/2} + (S^d_{ij} S^d_{ij})^{5/4}}
@@ -290,8 +271,8 @@ where $\sigma_\alpha$ is the Lennard-Jones
 hard-sphere diameter ($\text{\AA}$) and $\Omega_v$ is the
 collision integral, an empirical function of the
 temperature $T$. The thermal conductivity of species $\alpha$ is given by
-\be k_\alpha = \frac{\mu_\alpha \, c_{p,\alpha}}{\PR}  \quad [=] \quad \si{W/(m.K)} \ee
-Note that the default value of the Prandtl number $\PR$ is 0.7.  However, this is an input property that can be set by the user.
+\be k_\alpha = \frac{\mu_\alpha \, c_{p,\alpha}}{\PR_\alpha}  \quad [=] \quad \si{W/(m.K)} \ee
+Note if $\PR_\alpha$ is not defined that the default value of 0.7 is assumed.
 The viscosity and thermal conductivity of a gas mixture are given by  ~\cite{Davidson:1993}
 \be \mu_{\hbox{\tiny DNS}} = \frac{\sum_\alpha \mu_\alpha \; X_\alpha \; M_\alpha ^{1/2}}{\sum_\alpha X_\alpha \; M_\alpha ^{1/2}}  \quad ; \quad k_{\hbox{\tiny DNS}} = \frac{\sum_\alpha k_\alpha \; X_\alpha \; M_\alpha ^{1/2}}{\sum_\alpha X_\alpha \; M_\alpha ^{1/2}}  \ee
 The binary diffusion coefficient of species $\alpha$
@@ -392,7 +373,7 @@ F_{{\rm B},\z,ijk} &=  - \frac{\tp_{ij,k+1}  \, \rho_{ijk} + \tp_{ijk} \, \rho_{
 \end{align}
 Notice the somewhat unusual discretization of the term $\tp \, \nabla (1/\rho)$, which is needed to be consistent with the discretization of the other two terms in Eq.~(\ref{p_decomp}):
 \begin{align}
-  \frac{1}{(\rho_{ijk}+\rho_{i,jk})/2} \frac{\tp_{i+1,jk}-\tp_{ijk}}{\dx} =& \frac{1}{\dx} \left( \frac{\tp_{i+1,jk}}{\rho_{i+1,jk}}-\frac{\tp_{ijk}}{\rho_{ijk}} \right) \nonumber \\[.1in]
+  \frac{1}{(\rho_{ijk}+\rho_{i+1,jk})/2} \frac{\tp_{i+1,jk}-\tp_{ijk}}{\dx} =& \frac{1}{\dx} \left( \frac{\tp_{i+1,jk}}{\rho_{i+1,jk}}-\frac{\tp_{ijk}}{\rho_{ijk}} \right) \nonumber \\[.1in]
   & - \frac{\tp_{i+1,jk} \, \rho_{ijk} + \tp_{ijk} \, \rho_{i+1,jk}}{\rho_{ijk}+\rho_{i+1,jk}} \frac{1}{\dx} \left( \frac{1}{\rho_{i+1,jk}} - \frac{1}{\rho_{ijk}} \right)
 \end{align}
 
@@ -439,16 +420,32 @@ The equivalence of the two definitions of the divergence is a result of the form
 The following sections describe how the boundary conditions for the pressure equation are specified.
 
 
-\subsubsection{Open Boundary Conditions}
+\subsubsection{Open Boundary Conditions (General)}
 
 An open boundary is where fluid is allowed to flow into or out of the computational domain depending on the local pressure gradient. The boundary condition for the pressure depends on whether the local flow is incoming or outgoing. In either case, it is assumed that the quantity, $\cH = \tilde{p}/\rho + |\mathbf{u}|^2/2$, remains constant along a streamline. It is also assumed that the pressure perturbation at the boundary is a user-specified input, $\tilde{p}_{\rm ext}$, that is zero by default. The Poisson solver for $\cH$ requires a Dirichlet condition at an open boundary; that is, its value is specified at the external boundary of the mesh. As an example, consider the boundary, $x=x_{\min}$. The boundary value of $\cH$ is given by the following expressions depending on the direction of the flow across the external cell face:
 \be
-  {\ct BXS(J,K)} \equiv \cH_{\ha,jk} = \left\{ \begin{array}{ll} \displaystyle
+  {\mathtt{BXS(J,K)}} \equiv \cH_{\ha,jk} = \left\{ \begin{array}{ll} \displaystyle
           \displaystyle \frac{\tp_{\rm ext}}{\rho_{1,jk}} + \ha \left( \bar{u}_{1.jk}^2 + \bar{v}_{1,jk}^2 + \bar{w}_{1,jk}^2 \right)  & {\rm outgoing} \\ [0.2in]
           \displaystyle \frac{\tp_{\rm ext}}{\rho_\infty} + \ha \left( u_\infty^2 + v_\infty^2 + w_\infty^2 \right)  & {\rm incoming}
           \end{array} \right.
 \ee
 {\ct BXS} is the name of the array sent to the pressure solver. The bar over the velocity components indicates an average over the respective faces of the grid cell adjacent to the boundary. The subscript $\infty$ denotes user-specified far field velocity and density values. Typically, the far field velocity is zero, but for simulations involving an external wind, these values can be specified accordingly.
+
+\subsubsection{Open Boundary Conditions (Wind)}
+
+If {\ct SPEED} is specified on the {\ct WIND} line this invokes a slightly different type of {\ct OPEN} boundary condition that enforces a spatially (vertical only presently) and temporally varying external wind field on the boundaries.  This field also initializes the velocity throughout the domain.
+
+Let $\mathbf{n}$ denote a unit normal vector pointing \emph{into} the domain.  Boundary values at an interface are denoted with a subscript ``$I$''.  Then $\bu_I\cdot\mathbf{n}>0$ is an inflow and $\bu_I\cdot\mathbf{n}<0$ is an outflow condition. At an inflow, generally the mean viscous and convective forces are small and a simplified momentum equation may be used to develop a boundary value for $H$, namely, $\partial u_i/\partial t = -\partial H/\partial x_i$. To develop the boundary condition, let $u$ denote the $x$-component of velocity and consider an interface normal to $x$ pointing into the domain.  The prescribed external wind field velocity component at height $z$ and time $t$ is denoted $\bu_\infty(z,t)$.  Using a one-sided difference for $H$ and an explicit Euler approximation of the velocity time derivative.  Considering a left side boundary normal to the $x$ direction, at an outflow boundary, $H$ is set equal to the local kinetic energy per unit mass from the cell just upwind of the boundary:
+\begin{equation}
+\label{eq:Hout}
+\mathtt{BXS(J,K)} = \frac{\tp_{\rm ext}}{\rho_{1,jk}} + \ha\,(\bar{u}^n \bar{u}^n + \bar{v}^n \bar{v}^n + \bar{w}^n \bar{w}^n)_{1,jk} \quad \mbox{if} \quad u_{0,jk}^n<=0 \quad \mbox{(outflow)}
+\end{equation}
+The overbar on the velocity components denotes a linear interpolation of the primitive staggered component values to the cell center.  At an inflow, the boundary value of $H$ is set to approximate a Neumann boundary with a specified velocity component normal to the boundary:
+\begin{equation}
+\label{eq:Hin}
+\mathtt{BXS(J,K)} = \frac{\tp_{\rm ext}}{\rho_{\infty,jk}} + \cH_{\ha,jk}^n + \frac{\dx}{2}\left[\frac{u_\infty(z,t) - u_{0,jk}^n}{\dt}\right] \quad \mbox{if} \quad \mathbf{u}_I\cdot\mathbf{n}>0 \quad \mbox{(inflow)}
+\end{equation}
+Note that the tangential components of the velocity vector specified by the wind field are also applied on external domain boundaries as discussed in Sec.~\ref{sec:opentang}.
 
 
 \subsubsection{Solid Boundary Conditions}
@@ -461,9 +458,9 @@ Boundary conditions at a solid surface fall into three distinct categories:
 \end{enumerate}
 
 \begin{description}
-\item[Case 1:] FDS uses a direct Poisson solver that requires that one specify either Neumann (specified normal gradient) or Dirichlet (specified value) boundary conditions at the exterior of the mesh. If an entire face of the mesh is a solid or forced flow boundary, we can use the Neumann boundary condition for the entire face. For example, at the $x=x_{\hbox{\tiny max}}$ boundary we can specify the normal gradient of $\cH$: \be {\ct BXF(J,K)} \equiv \frac{\hp_{I+1,jk}^n-\hp_{I,jk}^n}{\dx} = -F_{x,I,jk}^n - \frac{u_{I,jk}^*-u_{I,jk}^n}{\dt} \label{dbc} \ee where {\ct BXF} is the name of the boundary condition array sent to the pressure solver, $\cH_{I+1,jk}$ lives in the center of the ghost cell to the right of the boundary, $\cH_{I,jk}$ lives in the center of cell to the left of the boundary, $F_{x,I,jk}^n$ is the $x$-component of $\bF$ at the vent or solid wall at the start of the time step, and $u_{I,jk}^*$ is the user-specified value of the $x$-component of velocity at the next time step. For the corrector step: \be {\ct BXF(J,K)} \equiv \frac{\hp_{I+1,jk}^*-\hp_{I,jk}^*}{\dx} = -F_{x,I,jk}^* - \frac{u_{I,jk}^{n+1}-\ha(u_{I,jk}^*+u_{I,jk}^n)}{\dt/2} \label{dbc2} \ee The normal velocity component at the next time step, $u_{I,jk}^{n+1}$, is exactly (to machine accuracy) the specified value. If the boundary is a solid wall, then this value starts and remains zero. If the boundary is a forced flow vent, then this value follows the user-specified time history.
+\item[Case 1:] FDS uses a direct Poisson solver that requires that one specify either Neumann (specified normal gradient) or Dirichlet (specified value) boundary conditions at the exterior of the mesh. If an entire face of the mesh is a solid or forced flow boundary, we can use the Neumann boundary condition for the entire face. For example, at the $x=x_{\hbox{\tiny max}}$ boundary we can specify the normal gradient of $\cH$: \be {\mathtt{BXF(J,K)}} \equiv \frac{\hp_{I+1,jk}^n-\hp_{I,jk}^n}{\dx} = -F_{x,I,jk}^n - \frac{u_{I,jk}^*-u_{I,jk}^n}{\dt} \label{dbc} \ee where {\ct BXF} is the name of the boundary condition array sent to the pressure solver, $\cH_{I+1,jk}$ lives in the center of the ghost cell to the right of the boundary, $\cH_{I,jk}$ lives in the center of cell to the left of the boundary, $F_{x,I,jk}^n$ is the $x$-component of $\bF$ at the vent or solid wall at the start of the time step, and $u_{I,jk}^*$ is the user-specified value of the $x$-component of velocity at the next time step. For the corrector step: \be {\mathtt{BXF(J,K)}} \equiv \frac{\hp_{I+1,jk}^*-\hp_{I,jk}^*}{\dx} = -F_{x,I,jk}^* - \frac{u_{I,jk}^{n+1}-\ha(u_{I,jk}^*+u_{I,jk}^n)}{\dt/2} \label{dbc2} \ee The normal velocity component at the next time step, $u_{I,jk}^{n+1}$, is exactly (to machine accuracy) the specified value. If the boundary is a solid wall, then this value starts and remains zero. If the boundary is a forced flow vent, then this value follows the user-specified time history.
 
-\item[Case 2:] At exterior mesh faces with a mix of solid and open boundaries, we must apply Dirichlet boundary conditions at all cells, meaning that $\cH$ is specified rather than its gradient. Consider the same mesh face as in Case~1. We first modify the flux term using a previously computed value of the pressure and the desired time derivative of the velocity component: \be F_{x,I,jk}^{n,k} =  - \frac{ \cH_{I+1,jk}^{n,k-1} - \cH_{I,jk}^{n,k-1} }{\dx} - \frac{ u_{I,jk}^{*} - u_{I,jk}^n}{\dt} \label{Fspec} \ee Next, the value of $\cH$ is specified at the mesh boundary: \be {\ct BXF(J,K)} \equiv \cH_{I+\ha,jk}^{n,k} = \frac{\cH_{I,jk}^{n,k-1} + \cH_{I+1,jk}^{n,k-1} }{2} + \frac{\dx}{4\, \dt} \left( u_{I,jk}^{*,k-1}-u_{I,jk}^{*} \right) \label{HbcE} \ee The superscript $k$ is an iterative index. We use the interface value of $\cH$ from the previous iteration to estimate its value at the current. The term, $u_{I,jk}^{*,k-1}$, is a first-order estimate of the desired normal velocity component at the next time step, $u_I^{*}$. The purpose of the second term on the right hand side of Eq.~(\ref{HbcE}) is demonstrated by summing Eq.~(\ref{Fspec}) and Eq.~(\ref{HbcE}) which leads to: \be u_{I,jk}^{*} = u_{I,jk}^n + \frac{u_{I,jk}^{*,k-1}-u_{I,jk}^{*}}{2} - \dt \left( F_{x,I,jk}^{n,k} + \frac{ \cH_{I+\ha,jk}^{n,k} - \cH_{I,jk}^{n,k-1} }{ \dx/2} \right) \label{uIE} \ee Very loosely, this converges according to \be \left| u_{I,jk}^{*,k}-u_{I,jk}^{*} \right| \approx \left| \frac{u_{I,jk}^{*,k-1}-u_{I,jk}^{*}}{2} \right| \ee This iterative process continues until $\left| u_{I,jk}^{*,k} - u_{I,jk}^{*} \right|$ falls below a specified tolerance. By default, the tolerance is $\dx/2$. For the corrector step, this procedure is the same, except the boundary condition for the pressure term is: \be {\ct BXF(J,K)} \equiv \cH_{I+\ha,jk}^{*,k} = \frac{\cH_{I,jk}^{*,k-1} + \cH_{I+1,jk}^{*,k-1} }{2} + \frac{\dx}{2\, \dt} \left( u_{I,jk}^{n+1,k-1}-u_{I,jk}^{n+1} \right) \ee
+\item[Case 2:] At exterior mesh faces with a mix of solid and open boundaries, we must apply Dirichlet boundary conditions at all cells, meaning that $\cH$ is specified rather than its gradient. Consider the same mesh face as in Case~1. We first modify the flux term using a previously computed value of the pressure and the desired time derivative of the velocity component: \be F_{x,I,jk}^{n,k} =  - \frac{ \cH_{I+1,jk}^{n,k-1} - \cH_{I,jk}^{n,k-1} }{\dx} - \frac{ u_{I,jk}^{*} - u_{I,jk}^n}{\dt} \label{Fspec} \ee Next, the value of $\cH$ is specified at the mesh boundary: \be {\mathtt{BXF(J,K)}} \equiv \cH_{I+\ha,jk}^{n,k} = \frac{\cH_{I,jk}^{n,k-1} + \cH_{I+1,jk}^{n,k-1} }{2} + \frac{\dx}{4\, \dt} \left( u_{I,jk}^{*,k-1}-u_{I,jk}^{*} \right) \label{HbcE} \ee The superscript $k$ is an iterative index. We use the interface value of $\cH$ from the previous iteration to estimate its value at the current. The term, $u_{I,jk}^{*,k-1}$, is a first-order estimate of the desired normal velocity component at the next time step, $u_I^{*}$. The purpose of the second term on the right hand side of Eq.~(\ref{HbcE}) is demonstrated by summing Eq.~(\ref{Fspec}) and Eq.~(\ref{HbcE}) which leads to: \be u_{I,jk}^{*} = u_{I,jk}^n + \frac{u_{I,jk}^{*,k-1}-u_{I,jk}^{*}}{2} - \dt \left( F_{x,I,jk}^{n,k} + \frac{ \cH_{I+\ha,jk}^{n,k} - \cH_{I,jk}^{n,k-1} }{ \dx/2} \right) \label{uIE} \ee Very loosely, this converges according to \be \left| u_{I,jk}^{*,k}-u_{I,jk}^{*} \right| \approx \left| \frac{u_{I,jk}^{*,k-1}-u_{I,jk}^{*}}{2} \right| \ee This iterative process continues until $\left| u_{I,jk}^{*,k} - u_{I,jk}^{*} \right|$ falls below a specified tolerance. By default, the tolerance is $\dx/2$. For the corrector step, this procedure is the same, except the boundary condition for the pressure term is: \be {\mathtt{BXF(J,K)}} \equiv \cH_{I+\ha,jk}^{*,k} = \frac{\cH_{I,jk}^{*,k-1} + \cH_{I+1,jk}^{*,k-1} }{2} + \frac{\dx}{2\, \dt} \left( u_{I,jk}^{n+1,k-1}-u_{I,jk}^{n+1} \right) \ee
 
 \item[Case 3:] FDS uses a simple, direct-forcing immersed boundary method (IBM) \cite{Fadlun:2000} for block Cartesian geometries. Internal solid obstructions are represented as masked grid cells, but the no-flux condition (\ref{dbc}) cannot be directly prescribed at the boundaries of these blocked cells. However, by solving the pressure equation several times within a time step, the normal component of velocity can be driven to within some specified tolerance of the desired value. At the start of a time step, the components of $\bF$ are computed at all cell faces that do not correspond to walls. At those cell faces that do correspond to solid walls but are not located at the exterior of the computational grid, we prescribe (for example at the cell face where $u_{ijk}$ ``lives``): \be F_{x,ijk}^{n,k} = - \frac{\hp_{i+1,jk}^{n,k-1}-\hp_{ijk}^{n,k-1}}{\dx} -\frac{u_{ijk}^*-u_{ijk}^n}{\dt} \label{sbc} \ee at the predictor step, and \be F_{x,ijk}^{*,k} = - \frac{\hp_{i+1,jk}^{*,k-1}-\hp_{ijk}^{*,k-1}}{\dx} - \frac{u_{ijk}^{n+1}-\ha \left( u_{ijk}^*+u_{ijk}^n \right)}{\dt/2} \label{sbcc} \ee at the corrector step. Note that the superscript $n$ refers to the time step and $k$ refers to the iteration of the pressure solver. Note that $u_{ijk}^*$ and $u_{ijk}^{n+1}$ are approximate because the true value of the velocity time derivative depends on the solution of the pressure equation, but since the most recent estimate of pressure is used, the approximation is fairly good. Also, even though there are small errors in normal velocity at solid surfaces, the divergence of each blocked cell remains exactly zero for the duration of the calculation. In other words, the total flux into a given obstruction is always identically zero, and the error in normal velocity is usually at least several orders of magnitude smaller than the characteristic flow velocity. When implemented as part of a predictor-corrector updating scheme, the no-flux condition at solid surfaces is maintained fairly well.
 \end{description}
@@ -472,24 +469,32 @@ Boundary conditions at a solid surface fall into three distinct categories:
 \subsubsection{Boundary Conditions at Mesh Interfaces}
 \label{section:mesh_interface}
 
-Dirichlet boundary conditions are applied at the interface between two meshes, which means that $\cH$ is specified at the interface. Consider the interface between two non-overlapping meshes. The value of $\cH$ in the center of the rightmost cell of the left mesh is denoted $\cH_I$, and the value of $\cH$ in the center of the leftmost cell of the right mesh is $\cH_1$. The interface value of the left mesh is denoted $\cH_{I+\ha} \equiv (\cH_I + \cH_{I+1})/2$, and the interface value of the right mesh is denoted $\cH_\ha \equiv (\cH_0 + \cH_1)/2$. The specified value of $\cH$ for both meshes is:
-\be
-   \cH_{\ha}^k = \cH_{I+\ha}^k \equiv \frac{\cH_I^{k-1} + \cH_1^{k-1} }{2} + \frac{\dx}{4\, \dt} \left( u_I^{*,k-1}-u_0^{*,k-1} \right) \label{Hbc}
-\ee
-The superscript $k$ is an iterative index. The terms, $u_I^{*,k-1}$ and $u_0^{*,k-1}$, are first-order estimates of the normal velocity components at the next time step, based on the previous ($k-1$) estimate of the pressure field. For example, the normal velocity at the left mesh interface is calculated:
-\be
-  u_I^{*,k-1} = \bar{u}_I^n - \dt \left( F_{x,I}^{n} + \frac{ \cH_{I+\ha}^{k-1} - \cH_I^{k-1} }{ \dx/2} \right) \quad ; \quad \cH_{I+\ha}^{k-1} = \frac{\cH_I^{k-1}+\cH_1^{k-1}}{2} \label{u_est}
-\ee
-The purpose of the second term on the right hand side of Eq.~(\ref{Hbc}) is demonstrated by substituting $\cH_{I+\ha}^k$ from Eq.~(\ref{Hbc}) into Eq.~(\ref{u_est}) which leads to:
-\be
-   u_I^{*,k-1} = \bar{u}_I^n - \frac{u_I^{*,k-2}-u_0^{*,k-2}}{2} - \dt \left( F_{x,I}^{n} + \frac{ (\cH_I^{k-2}+\cH_1^{k-2})/2 - \cH_I^{k-1} }{ \dx/2} \right) \label{uI}
-\ee
-The extra term on the right hand side drives $u_I$ halfway towards $u_0$, which is itself driven halfway towards $u_I$. This iterative process continues until $\left| u_I^{*,k} - u_0^{*,k} \right|$ falls below a specified tolerance. By default, the tolerance is $\dx/2$.
+Dirichlet boundary conditions are applied at the interface between two meshes, which means that $\cH$, rather than $\nabla \cH$, is specified at the interface. Consider the interface between two non-overlapping meshes that abut at a common $x$ boundary. The value of $\cH$ in the center of the rightmost cell of the left mesh is denoted $\cH_{I,jk}$, and the value of $\cH$ in the center of the leftmost cell of the right mesh is $\cH_{1,jk}$. The interface value of the left mesh is denoted $\cH_{I+\ha,jk}$, and the interface value of the right mesh is denoted $\cH_{\ha,jk}$.
 
-For the corrector step, this procedure is the same, except the boundary condition for the pressure term is:
+At the start of a given time step $n$, the normal component of velocity at the interface of each respective mesh, $\bar{u}_{I,jk}^n$ and $\bar{u}_{0,jk}^n$, are forced to take on the same value, their average from the previous time step. In the predictor phase of the time step, the values are updated independently to provide a first-order estimate at the next time step:
+\begin{eqnarray}
+  u_{I,jk}^{*,m} &=& \bar{u}_{I,jk}^n - \dt \left( F_{x,I,jk}^{n} + \frac{ \cH_{I+\ha,jk}^{m} - \cH_{I,jk}^{m} }{ \dx/2} \right) \quad ; \quad  u_{I,jk}^* = \lim_{m\to \infty} u_{I,jk}^{*,m} \label{u_est} \\[.1in]
+  u_{0,jk}^{*,m} &=& \bar{u}_{0,jk}^n - \dt \left( F_{x,0,jk}^{n} + \frac{ \cH_{1,jk}^{m} - \cH_{\ha,jk}^{m} }{ \dx/2} \right)   \quad ; \quad  u_{0,jk}^* = \lim_{m\to \infty} u_{0,jk}^{*,m} \label{u_est2}
+\end{eqnarray}
+Ideally, these estimated values, $u_{I,jk}^{*,m}$ and $u_{0,jk}^{*,m}$, should be the same, but they are typically not because the respective pressure fields are only guaranteed to be continuous at the interface, not differentiable (smooth). The common value of the pressure field at the interface boundary is:
 \be
-   \cH_{\ha}^k = \cH_{I+\ha}^k \equiv \frac{\cH_I^{k-1} + \cH_1^{k-1} }{2} + \frac{\dx}{2\, \dt} \left( u_I^{n+1,k-1}-u_0^{n+1,k-1} \right)
+   \cH_{\ha,jk}^m \equiv \cH_{I+\ha,jk}^m = \frac{\cH_{I,jk}^{m-1} + \cH_{1,jk}^{m-1} }{2} + \frac{\dx}{4\, \dt} \left( u_{I,jk}^{*,m-1}-u_{0,jk}^{*,m-1} \right) \label{Hbc}
 \ee
+The purpose of the second term on the right hand side of Eq.~(\ref{Hbc}) is seen by substituting $\cH_{I+\ha,jk}^m$ from Eq.~(\ref{Hbc}) into Eq.~(\ref{u_est}) which leads to:
+\be
+   u_{I,jk}^{*,m} = \bar{u}_{I,jk}^n - \frac{u_{I,jk}^{*,m-1}-u_{0,jk}^{*,m-1}}{2} - \dt \left( F_{x,I,jk}^{n} + \frac{ (\cH_{I,jk}^{m-1}+\cH_{1,jk}^{m-1})/2 - \cH_{I,jk}^{m} }{ \dx/2} \right) \label{uI}
+\ee
+The extra term on the right hand side drives $u_{I,jk}^{*,m}$ halfway towards $u_{0,jk}^{*,m}$, and vice versa. This iterative process continues until $\left| u_{I,jk}^{*,m} - u_{0,jk}^{*,m} \right|$ falls below a specified tolerance. By default, the tolerance is $\dx/2$.
+
+For the corrector phase of the time step, the procedure is the same, except the boundary condition for the pressure term is:
+\be
+   \cH_{\ha,jk}^m \equiv \cH_{I+\ha,jk}^m = \frac{\cH_{I,jk}^{m-1} + \cH_{1,jk}^{m-1} }{2} + \frac{\dx}{2\, \dt} \left( u_{I,jk}^{n+1,m-1}-u_{0,jk}^{n+1,m-1} \right) \quad ; \quad  u_{I,jk}^{n+1} = \lim_{m\to \infty} u_{I,jk}^{n+1,m}
+\ee
+The factor of $1/2$ instead of $1/4$ on the last term is due to the structure of the corrector velocity step:
+\be
+   u_{I,jk}^{n+1,m} = \frac{\bar{u}_{I,jk}^n+\bar{u}_{I,jk}^*}{2} - \frac{u_{I,jk}^{n+1,m-1}-u_{0,jk}^{n+1,m-1}}{2} - \frac{\dt}{2} \left( F_{x,I,jk}^{*} + \frac{ (\cH_{I,jk}^{m-1}+\cH_{1,jk}^{m-1})/2 - \cH_{I,jk}^{m} }{ \dx/2} \right) \label{uI2}
+\ee
+Note that throughout this iterative procedure, MPI calls are made to exchange values of $u$ and $\cH$ in the neighboring cells.
 
 \subsection{Iterative Procedure for Updating Velocity}
 \label{section:pressure_iteration}
@@ -551,6 +556,7 @@ Note that for both stages, the normal components of velocity at the interface ar
    \ee
    If the criteria are not met, return to Step~\ref{step3}.
 \end{enumerate}
+This iterative scheme works well for most multiple mesh configurations, but it is excessively slow in the case of tunnel geometries, where potentially dozens of meshes might be aligned end to end to make up the tunnel. In such circumstances, there is an optional pre-conditioning scheme for the solution of the Poisson equation described in Appendix~\ref{tunnel_preconditioner}.
 
 
 
@@ -599,18 +605,53 @@ where $s^+ = s/\delta_\nu$ is the roughness length in viscous units and $s$ is t
 \end{equation}
 where $\tilde{B}_{\rm max} = 9.5$.
 
+\subsection{Atmospheric Boundary Layer Model (Experimental)}
+\label{sec:abl_wall_model}
+
+The formulation for the ABL wall model implemented in FDS follows \cite{Stoll:2008}.  The potential temperature is given by $$\theta=T \left( \frac{p_0}{p} \right)^{R/(W_{\rm air} \, c_p)}$$ where $p_0$ is typically 100~kPa and $R/(W_{\rm air} \, c_p) \approx 0.286$.  The heat flux at the wall is given by
+\be
+\dot{q}''_{\rm w} = h (\theta_{\rm w} - \theta_{\rm g}) = h\,\Delta \theta \,\mbox{,}
+\ee
+where $h$ is the heat transfer coefficient to be determined.  The potential temperatures at the wall and first gas phase cell center are $\theta_{\rm w}$ and $\theta_{\rm g}$, respectively.  A positive heat flux indicates an unstable boundary layer while a negative heat flux indicates a stable boundary layer.
+
+The key aspect of this model is that we require consistency between the surface heat flux, $\dot{q}''_{\rm w}$, and the wall stress obtained from the friction velocity, here denoted by $u_*$ to be consistent with the atmospheric literature ($u_* = u_\tau = \sqrt{\tau_w/\rho}$).  These quantities are linked via the Obukhov length, $L$.  The equations below for $L$, $u_*$, and $\dot{q}''_{\rm w}$ are solved simultaneously with $z=\Delta z/2$ being the distance of the first cell center away from the wall.  In practice, a simple Picard iteration usually converges to less than 1 \% error in three steps.
+
+\begin{equation}
+\label{eq:obukhov_length}
+L = -\frac{u_*^3 \theta_{\rm g}}{\kappa \,g\, \dot{q}''_{\rm w}}
+\end{equation}
+\begin{equation}
+\label{eq:ustar_abl_model}
+u_* = \frac{|u|\kappa}{\ln(z/z_0)-\Psi_M(z/L)}
+\end{equation}
+\begin{equation}
+\label{eq:q_abl_model}
+\dot{q}''_{\rm w} = \frac{\Delta \theta \,u_*\kappa}{\ln(z/z_0)-\Psi_H(z/L)}
+\end{equation}
+
+The stability corrections, $\Psi_M$ and $\Psi_H$, for momentum and heat flux, respectively, are given taken from Dyer~\cite{Dyer:1974}:
+\begin{eqnarray}
+   \Psi_{\rm M}\left(\frac{z}{L}\right) &=& \left\{ \begin{array}{c@{\quad:\quad}l} \displaystyle -5 \, \frac{z}{L} & L \ge 0 \\[.2in]  \displaystyle 2 \, \ln \left[\frac{1+\zeta}{2}\right] + \ln \left[\frac{1+\zeta^2}{2}\right]-2 \, \tan^{-1}(\zeta) + \frac{\pi}{2} & L<0 \end{array} \right.  \\[.2in]
+   \Psi_{\rm H}\left(\frac{z}{L}\right) &=& \left\{ \begin{array}{c@{\quad:\quad}l} \displaystyle -5 \, \frac{z}{L} & L \ge 0 \\[.2in]  \displaystyle 2 \, \ln \left[\frac{1+\zeta^2}{2}\right] & L<0 \quad \quad  \displaystyle \zeta=\left( 1 - \frac{16 \, z}{L} \right)^{1/4}  \end{array} \right.
+\end{eqnarray}
+
 \subsection{Wall Model Implementation}
-Once $u^+$ has been determined from the model profile, the stress may be obtained from (the definition of $u^+$)
+Once $u_\tau$ has been determined from the model profile, the stress may be obtained from
 \begin{equation}
 \label{eqn_wall_stress}
-\tau_w = \rho \left( \frac{u}{u^+} \right)^2
+\tau_w = \rho u_\tau^2
 \end{equation}
 Generally, this requires an iterative procedure since $\tau_w$ is needed to define $\delta_\nu$ and hence $y^+$.  The strategy employed in FDS is to first compute $\tau_w$ as if the flow is locally laminar (DNS), and if the calculation is an LES the laminar value is used as an initial guess.  Testing has shown that three iterations is sufficient to converge the residual error in the profile model to 1\%.
+
+\subsection{Near-Wall Eddy Viscosity Model}
+\label{sec:wall_wale_model}
+
+The WALE model (see Sec.~\ref{sec:wale}) is used as the near-wall eddy viscosity model; that is, WALE is used to compute the eddy viscosity for any Cartesian cell adjacent to a solid boundary.  There are two reasons for this.  First, the test filtering operation needed for the subgrid kinetic energy in our implementation of Deardorff's model is not well defined near a wall.  Second, with the WALE model the eddy viscosity goes to zero at the correct rate, $\nu_t = O(y^3)$, without the need for an explicit damping function.
 
 \subsection{Wall Damping of the Turbulent Viscosity}
 \label{sec:wall_damping}
 
-The turbulent viscosity $\nu_{\rm t} = \mu_{\rm t}/\rho$ may be thought of as a ``mixing length'' squared divided by a time scale.  For example, in the Smagorinsky model the mixing length is $\ell_{\rm mix} = C_{\rm s} \,\Delta$ and the time scale is the inverse of the strain rate invariant $1/|S|$.  Thus, the turbulent kinematic viscosity has units of length$^2$/time.
+An alternative to the WALE model is to use Van Driest damping\footnote{Van Driest damping was the default wall model in FDS Version 6}. The turbulent viscosity $\nu_{\rm t} = \mu_{\rm t}/\rho$ may be thought of as a ``mixing length'' squared divided by a time scale.  For example, in the Smagorinsky model the mixing length is $\ell_{\rm mix} = C_{\rm s} \,\Delta$ and the time scale is the inverse of the strain rate invariant $1/|S|$.  Thus, the turbulent kinematic viscosity has units of length$^2$/time.
 
 To achieve the correct decay of the Reynolds stresses near a wall, Van Driest~\cite{Wilcox:1} proposed the following modification:
 \begin{equation}
@@ -623,14 +664,10 @@ where $A$ is a dimensionless empirical constant equal to 26.  The term in bracke
 \end{equation}
 where the strain rate, $|S|$, is defined in Eq.~(\ref{constant_coef_LES}).
 
-\subsection{Alternate Near-Wall Eddy Viscosity Model}
-\label{sec:wall_wale_model}
+\subsection{Open Boundaries (General, Wind)}
+\label{sec:opentang}
 
-The WALE model (see Sec.~\ref{sec:wale}) is also available as a near-wall eddy viscosity model.  In fact, this is WALE's main purpose.  With the WALE model the eddy viscosity goes to zero at the correct rate, $\nu_t = O(y^3)$, without the need for an explicit damping function.
-
-\subsection{Open Boundaries}
-
-An open boundary is where the fluid is allowed to enter or exit the computational domain based on local pressure gradients, like at an open window or door of a building. Typically, the gradients of the tangential components of velocity are set to zero at an open boundary. That is, the ``ghost cell'' values of the tangential velocity components are set equal to their values in the first grid cell. However, if the user specifies a wind field $(u_\infty,v_\infty)$, then the tangential components of velocity are set to their respective far-field values at all inflow boundaries. At outflow boundaries, the standard zero-gradient condition is applied.
+An open boundary is where the fluid is allowed to enter or exit the computational domain based on local pressure gradients, like at an open window or door of a building. Typically, the gradients of the tangential components of velocity are set to zero at an open boundary. That is, the ``ghost cell'' values of the tangential velocity components are set equal to their values in the first grid cell. However, if the user specifies a wind field $(u_\infty(z,t),v_\infty(z,t))$, then the tangential components of velocity are set to their respective far-field values at all inflow boundaries. At outflow boundaries, the standard zero-gradient condition is applied.
 
 \subsection{Mesh Boundaries}
 

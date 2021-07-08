@@ -26,6 +26,8 @@ resource_manager=
 walltime=
 showcommandline=
 showscript=
+CHECK_DIRTY=-g
+CHECK=
 
 INTEL="-I"
 # the mac doesn't have Intel MPI
@@ -54,8 +56,10 @@ echo "Runs FDS validation set"
 echo ""
 echo "Options"
 echo "-b - use debug version of FDS"
+echo "-C - check that case has run"
 echo "-e exe - run using exe (full path to fds)."
 echo "      Note: environment must be defined to use this executable"
+echo "-g - run even if input files or executable is dirty"
 echo "-h - display this message"
 echo "-I - run with Intel MPI version of fds"
 echo "-j job_prefix - specify job prefix"
@@ -77,11 +81,14 @@ exit
 }
 
 DEBUG=$OPENMP
-while getopts 'be:EhIj:m:o:Oq:r:suvVw:xy' OPTION
+while getopts 'bCe:EghIj:m:o:Oq:r:suvVw:xy' OPTION
 do
 case $OPTION in
   b)
    DEBUG="-b $OPENMP"
+   ;;
+  C)
+   CHECK=1
    ;;
   e)
    EXE="$OPTARG"
@@ -91,6 +98,9 @@ case $OPTION in
    ;;
   E)
    TCP="-E "
+   ;;
+  g)
+   CHECK_DIRTY=
    ;;
   h)
   usage;
@@ -147,7 +157,10 @@ if [ "$EXE" != "" ]; then
   EXE="-e $full_filepath"
 fi
 
-export QFDS="$SCRIPTDIR/qfds.sh -f $REPO $walltime $showcommandline $showscript $DV $INTEL $EXE"
+export QFDS="$SCRIPTDIR/qfds.sh $CHECK_DIRTY -f $REPO $walltime $showcommandline $showscript $DV $INTEL $EXE"
+if [ "$CHECK" != "" ]; then
+  export QFDS="$SVNROOT/fds/Verification/scripts/Check_FDS_Cases.sh"
+fi
 
 if [ "$QUEUE" != "" ]; then
    QUEUE="-q $QUEUE"
@@ -161,6 +174,35 @@ else
    export RESOURCE_MANAGER="PBS"
 fi
 ##############################################################
+
+# abort if repo is dirty
+
+if [ ! $STOPFDS ] ; then
+  ABORT=
+  if [ "$CHECK_DIRTY" != "" ]; then
+    ndiffs=`git diff --shortstat FDS_Input_Files/*.fds | wc -l`
+    nsourcediffs=`git diff --shortstat ../../Source/*.f90 | wc -l`
+    if [ $ndiffs -gt 0 ]; then
+       echo ""
+       echo "***error: One or more input files are dirty."
+       git status -uno | grep FDS_Input_Files  | grep -v \/FDS_Input_Files
+       ABORT=1
+    fi
+    if [ $nsourcediffs -gt 0 ]; then
+       echo ""
+       echo "***error: One or more source files are dirty."
+       cd ../..
+       git status -uno | grep Source
+       ABORT=1
+    fi
+    if [ "$ABORT" == "1" ]; then
+       echo ""
+       echo "Use the -g option to run anyway."
+       echo "Exiting."
+       exit 1
+    fi
+  fi
+fi
 
 # Skip if STOPFDS (-s option) is specified
 if [ ! $STOPFDS ] ; then

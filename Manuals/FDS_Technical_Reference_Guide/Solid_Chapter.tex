@@ -112,6 +112,12 @@ where $C$ is a empirical coefficient for natural convection (1.52 for a horizont
 \ee
 For planar surfaces, the default values are $C_1=0$, $C_2=0.037$, $n=0.8$, $m=0.33$, and $L=1$~m. For cylindrical surfaces, the default values are $C_1=0$, $C_2=0.683$, $n=0.466$, $m=0.33$, and $L=D$, the diameter of the cylinder. For spherical surfaces, the default values are $C_1=2$, $C_2=0.6$, $n=0.5$, $m=0.33$, and $L=D$, the diameter of the sphere. Note that for a sphere, the coefficient for natural convection, $C$, is assumed to be zero. It is possible to change these values for a particular application, but it is not possible to find a set of parameters that is appropriate for the wide variety of scenarios considered. Various correlations for planes, cylinders, and spheres can be found in Refs.~\cite{Holman:1,Incropera:1}.
 
+To avoid excessively large values of the heat transfer coefficient for very small cylinders and spheres, an upper bound is imposed:
+\be
+    h<0.5 \, \frac{r \, \rho \, c}{n \, \dt}
+\ee
+where $r$ is the radius of the cylinder or sphere, $\rho c$ is the density times specific heat of the solid material, $\dt$ is the time step, and $n=2$ for a cylinder and $n=3$ for a sphere. The factor of 0.5 on the right hand side of the inequality ensures that the change in temperature of the small particle in one time step cannot exceed one half of the difference between the gas and solid.
+
 
 \subsubsection{Optional Near-Wall Model}
 \label{conflux_wall_model}
@@ -391,21 +397,37 @@ This reaction can be implemented by setting $T_{\rm thr,\alpha\beta} = T_{\rm f}
 
 \subsection{Liquid Fuels}
 
-The rate at which liquid fuel evaporates when burning is a function of the liquid temperature and the concentration of fuel vapor above the pool surface. According to the Clausius-Clapeyron relation, the volume fraction of the fuel vapor above the surface is a function of the liquid boiling temperature
-\be X_{\rm F,\ell} = \exp \left[ -\frac{ h_{\rm v} W_{\rm F}}\R \left(\frac{1}{T_{\rm s}}-\frac{1}{T_{\rm b}} \right) \right]
-\label{CC_liquid}
-\ee
-where $h_{\rm v}$ is the heat of vaporization, $W_{\rm F}$ is the molecular weight of the fuel gas, $T_{\rm s}$ is the surface temperature, and $T_{\rm b}$ is the boiling temperature of the fuel~\cite{Prasad:1}. The evaporation rate of the fuel is governed by Stefan diffusion~\cite{Taylor&Krishna}:
+Consider a liquid consisting of one or more components. The evaporation rate of each component is governed by the following relation:
 \be
-\dot{m}'' = h_{\rm m} \; \frac{\bp_m W_{\rm F}}{\R T_{\rm g}} \; \ln \left(\frac{X_{\rm F,g}-1}{X_{\rm F,\ell}-1}\right) \quad ; \quad h_{\rm m}= \frac{\SH \, D_{\rm \ell,g}}{L}
+\dot{m}_\alpha'' = h_{\rm m} \, \rho_{\rm film} \, \ln \left( 1+B \right) \left( Y_{\alpha,{\rm sv}}+\frac{Y_{\alpha,{\rm sv}}-Y_{\alpha,{\rm g}}}{B} \right) \quad ; \quad B=\frac{\sum_{\alpha'} (Y_{\alpha',{\rm sv}}-Y_{\alpha',{\rm g}})}{1-\sum_{\alpha'} Y_{\alpha',{\rm sv}}}  \label{mdot_alpha}
 \ee
-where $\bp_m$ is the pressure, $T_{\rm g}$ is the temperature, and $X_{\rm F,g}$ is the volume fraction of fuel vapor in the grid cell adjacent to the pool surface. The diffusivity of the liquid species in the gas phase is $D_{\rm \ell,g}$.  The Sherwood number is given by
+$h_{\rm m}$ is the mass transfer coefficient, $\rho_{\rm film}$ is the density within a thin surface layer, $B$ is the Spalding mass transfer number, $Y_{\alpha,{\rm sv}}$ is the ``surface vapor'' mass fraction of component $\alpha$ at the liquid surface, and $Y_{\alpha,{\rm g}}$ is the mass fraction of component $\alpha$ in the gas away from the surface. The composition of the surface layer is obtained using Raoult's law with the Clausius-Clapeyron equation for the equilibrium vapor pressure.  The volume fraction of component $\alpha$ at the surface is:
 \be
-\SH=0.037~\SC^{\frac{1}{3}} \RE^{\frac{4}{5}} \quad ; \quad {\rm Sc}=0.6 \quad ; \quad \RE= \frac{\rho~||\bu||~L}{\mu}
+   X_{\alpha,{\rm sv}} = X_{\alpha,\ell} \, \exp \left[ -\frac{ h_{\rm v,\alpha} W_{\alpha}}\R \left(\frac{1}{T_{\rm s}}-\frac{1}{T_{\rm b,\alpha}} \right) \right]  \quad ; \quad
+   Y_{\alpha,{\rm sv}} = \frac{X_{\rm \alpha,sv} W_{\alpha} }{\sum_{\alpha'} X_{\rm \alpha',sv} W_{\alpha'} }
+   \label{CC_liquid}
 \ee
-The Reynolds number is calculated based on conditions in the cell adjacent to the surface. The length scale, $L$, used in calculating the Reynolds number is \SI{1}{m} unless otherwise specified and is the same length scale used for the convective heat transfer calculation.
+Here $X_{\alpha,\ell}$ is the volume fraction of component $\alpha$ in the liquid, $h_{\rm v,\alpha}$ is its heat of vaporization, $W_\alpha$ is its molecular weight, $T_{\rm b,\alpha}$ is its boiling temperature, and $T_{\rm s}$ is the surface temperature.  The mass transfer coefficient is given by
+\be
+h_{\rm m}= \frac{\SH \, D}{L} \quad ; \quad \SH=0.037~\SC^{\frac{1}{3}} \RE^{\frac{4}{5}} \quad ; \quad {\rm Sc}=0.6 \quad ; \quad \RE= \frac{\rho~||\bu||~L}{\mu}
+\ee
+Sh is the Sherwood number and $D$ is the mole-weighted gas phase diffusivity. The Reynolds number is calculated based on conditions in the gas phase grid cell adjacent to the surface. The length scale, $L$, is 1~m for a liquid pool unless specified otherwise.
 
-For simplicity, the liquid fuel itself is treated like a thermally-thick solid for the purpose of computing the heat conduction. There is no computation of the convection of the liquid within the pool.
+In practice, a liquid fuel may have multiple components, like gasoline or kerosene, but for the sake of reducing CPU time, all liquid components can be assumed to evaporate to form a common lumped gas species whose mass fraction is denoted $Z_{\rm g}$. In this case, the effective mass fraction of gas species $\alpha$ is assumed to be proportional to its value at the liquid surface:
+\be
+   Y_{\rm \alpha,g} = Z_{\rm g} \frac{Y_{\rm \alpha,sv}}{\sum_{\alpha'} Y_{\alpha',{\rm sv}}}
+\ee
+The assumption of an assumed lumped gas species is not mandatory---one can evaporate each liquid component to form a unique gas species.
+
+For simplicity, the liquid fuel itself is treated like a thermally-thick solid for the purpose of computing the heat conduction. There is no computation of the convection of the liquid within the pool. Obviously, this assumption has consequences. One of which is related to the fact that the evaporation rate expression ({\ref{mdot_alpha}) is applied only to the surface liquid layer. However, it is possible that an interior liquid layer may possess a temperature, $T_\ell$, in excess of the boiling temperature of an individual liquid component, $T_{\rm b,\alpha}$. If this is the case, an additional amount of component $\alpha$ is boiled off from the surface so as to drive the liquid temperature back towards the boiling point of component $\alpha$. This addition to the surface mass flux takes the form:
+\be
+   \dot{m}_\alpha'' = \frac{ \rho_{\ell,\alpha} \left( h(T_{\ell})-h(T_{\rm b,\alpha}) \right) \delta}{h_{\rm v,\alpha} \dt} \quad ; \quad  h(T) = \int_0^T  c_s(T') \d T' 
+\ee
+where $\rho_{\ell,\alpha}$ is the mass per unit volume of liquid component $\alpha$, $h(T)$ is the enthalpy of the liquid, $\delta$ is the layer thickness, $h_{\rm v,\alpha}$ is the heat of vaporization of component $\alpha$, and $\dt$ is the time step.
+
+
+
+
 
 \subsection{Shrinking and Swelling Materials}
 \label{sec:shrink_swell}
@@ -532,156 +554,3 @@ The boundary conditions in Eq.~(\ref{eq:rhoF}) provide qualitatively correct beh
 It should be noted that $\rho Y_{\gamma,\mathrm{F}}$ is currently taken from the gas phase solver at the current time level.  The mass flux is therefore time lagged between the gas phase and solid phase solvers, unlike the surface temperature from Eq.~(\ref{eq:tmpwall}).  This is a potential source of error that will be addressed in future development.
 
 
-\newpage
-\section{Aerosol Deposition}
-
-By default, FDS assumes that soot is transported just like all other gaseous species. That is, the soot particles are small enough that their settling velocity is small compared to the fire-driven flows of the gas containing the soot. Near surfaces, however, other mechanisms can affect the soot, which results in its deposition onto surfaces. The removal of soot via deposition can impact the visibility for egress and the time for smoke detectors to activate. In forensic fire reconstructions, the amount of soot deposited on surfaces can be correlated to post-fire observations. The deposition of particulates is also important for computing the dispersion characteristics of aerosol toxicants like ash, radionuclides, or other particulate matter.
-
-However, there is an option to treat any gas phase species as an aerosol that can be deposited on surfaces. Aerosol deposition is determined by applying an empirical deposition velocity to aerosols near surfaces. There are a number of phenomena that cause deposition: thermophoresis (where temperature gradients push the aerosol towards or away from the surface), gravitational settling, diffusive deposition (where the aerosols move along the boundary layer concentration
-gradient), and turbulent deposition (essentially impact deposition due to a turbulent boundary layer). Other phenomena, such as electrical fields, can also result in deposition but are not considered in FDS due to their relatively small contribution in compartment fire scenarios.
-
-The total aerosol deposition velocity to surfaces, $u_{\rm dep}$, is determined by assuming the deposition phenomena are independent, computing a deposition velocity for each mechanism, and then summing them~\cite{Bixler:1}
-\be
-u_{\rm dep} = u_{\rm g}+u_{\rm th}+u_{\rm dt}
-\ee
-where $u_{\rm g}$ is the gravitational settling velocity (for cells near upward-facing surfaces), $u_{\rm th}$ is the thermophoretic velocity, and $u_{\rm dt}$ is the combined diffusion-turbulence velocity. If the aerosol is located in a gas-phase cell adjacent to a wall, then the aerosol (represented by the subscript $\alpha$) is removed from the gas-phase and deposited onto the surface by imposing the following boundary condition
-\be
-\dot m_{\rm dep,\alpha}'' = \rho Y_\alpha \, u_{\rm dep}
-\ee
-Using this boundary condition, the aerosol surface density that accumulates on surfaces is tracked, and the amount
-of aerosol that deposits to a surface is removed from the adjacent gas-phase cell.
-Note that the subscript $\alpha$ refers to a species that contains soot or aerosol, whereas the subscript `a'
-in the remainder of the section refers to the condensed phase soot or aerosol properties, such as mass or density.
-
-\subsection{Gravitational Settling}
-
-The gravitational settling velocity is given by~\cite{Davies_Charles}
-\be
-u_{\rm g} = g m_{\rm a} \frac{\text{Cn}}{6 \pi \, \chi_{\rm d} \, \mu \, r_{\rm a}}
-\ee
-where $m_{\rm a}$ is the particle mass, $\chi_{\rm d}$ is a shape factor, $\mu$ is the dynamic viscosity of air,
-$r_a$ is the particle radius, and Cn is the Cunningham slip correction factor given by~\cite{Davies_Charles}
-\be
-\text{Cn} = 1 + 1.257 \; \text{Kn} + 0.4 \; \text{Kn} \; \mathrm{e}^{-1.1/\text{Kn}}
-\ee
-where Kn is the particle Knudsen number given by the ratio of the mean free path of the gas
-to the particle radius. Kn is computed as~\cite{Sippola:1}
-\be
-\text{Kn} = \frac{\lambda}{r_{\rm a}}
-\ee
-where $\lambda$ is the mean free path of gas molecules which is computed as~\cite{Jennings_S_G}
-\be
-\lambda = \mu_g \; \sqrt {\frac {\pi}{2 \; p \; \rho_g} }
-\ee
-For each aerosol species in the gas phase, a gravitational settling velocity is calculated
-and imposed on the convective term in the species transport
-equation~(Eq.~\ref{species}). This approach is similar to the drift flux model
-for smoke transport described in Hu et al.~\cite{Hu:1}. The gravitational settling velocity
-is also included in the total deposition velocity to deposit aerosols onto upward-facing flat surfaces,
-as described above.
-
-
-\subsection{Thermophoretic Deposition}
-
-The thermophoretic velocity is computed as
-\be
-u_{\rm th} = \frac{K_{\rm th} \nu}{T_{\rm g}} \; \frac{\d T}{\d x}
-\ee
-This requires the wall temperature gradient, which is only resolved in a DNS simulation.
-For an LES simulation, the temperature gradient is computed from the wall heat transfer coefficient.
-\be
- \frac{\d T}{\d x} = \frac{h \left( T_{\rm g} - T_{\rm w} \right)}{k_{\rm g}}
-\ee
-$K_{\rm th}$ is the thermophoretic velocity coefficient and is calculated using the following correlation~\cite{Brock:1}
-\be
- K_{\rm th} = \frac{2 \, C_{\rm s} \left(\alpha + C_{\rm t} \; \text{Kn} \right) \; \text{Cn}}{\left(1 + 3 \, C_{\rm m} \; \text{Kn} \right) \left(1 + 2 \, \alpha + 2 \, C_{\rm t} \, \text{Kn} \right) }
-\ee
-where $C_{\rm s}=1.17$ is the thermal slip coefficient, $\alpha$ is the ratio of the gas
-conductivity to the particle conductivity, $C_{\rm m}=1.14$ is the momentum accommodation
-coefficient, and $C_{\rm t}=2.18$ is the thermal accommodation coefficient.
-
-For each aerosol species in the gas phase, a thermophoretic velocity is calculated and imposed on the convective term in the species transport equation~(Eq.~\ref{species}). This approach follows the drift flux model
-for smoke transport described in Hu et al.~\cite{Hu:1}.
-
-\subsection{Turbulent Deposition}
-
-The diffusion-turbulence deposition velocity depends upon the flow regime
-(diffusion, diffusion-impaction, or inertia-moderated). The deposition velocity
-for these regimes is given below~\cite{McCoy_Hanratty}.
-\be
-u_{\rm dt} = \left\{ \begin{array}{r@{\quad \quad}l}
-         0.086 \; \text{Sc}^{-0.7} \; u_{\tau}        &  \tau^+ < 0.2 \\
-         3.5 \times 10^{-4} \; {\tau^+}^2 \; u_{\tau} &  0.2 < \tau^+ < 22.9 \\
-         0.17 \; u_{\tau}                             &  \tau^+ > 22.9
-         \end{array} \right.
-\ee
-where Sc is the particle Schmidt number, or the ratio of the kinematic viscosity to the
-Brownian diffusion coefficient of the particle ($\nu/D_{\rm B}$), $u_{\tau}$ is the wall friction velocity
-computed by the wall model, and $\tau^+$ is the dimensionless stopping distance given by~\cite{Ludwig_ICONE}
-\be
- \tau^+=\frac{\rho_{\rm a} \, (2 r_{\rm a})^2}{18 \, \mu^2}  \; u_{\tau}^2 \; \rho_{\rm g}
-\ee
-
-\newpage
-\section{Aerosol Agglomeration}
-
-Agglomeration is the process via which small aerosol particles become larger aerosol particles due to collisions that cause the smaller particles to stick together and become larger particles. The FDS implemenation of aerosol agglomeration is based on the agglomeration model in VICTORIA~\cite{NRC:VICTORIA}, a US NRC software package for modeling radioactive aerosol transport during severe accidents. The agglomeration mechanisms in FDS include Brownian, graviational, and turbulent (sheer and inertial). The agglomeration is governed by the equation below.
-\be
-\frac{\d N}{\d t} = \frac{1}{2} \int_{0}^{m} \Phi (\omega,m-\omega) N(\omega) N(m-\omega) \d \omega - N(m) \int_{0}^{\infty} \Phi (\omega,m) N(\omega) \d \omega - R(m) + S(m)
-\ee
-In the above equation $\Phi$ is an agglomeration kernel, $N(m)$ is the number density of particles of size $m$, $R$ is a removal term (e.g. outflow, oxidation), and $S$ is a source term (e.g. from combustion). The equation states that the rate of formation of particles of size $m$ is the rate that two particles whose combined size is $m$ collide, minus the rate at which particles of size $m$ collide with other particles and become a larger size, minus removal of particles of size $m$, and plus the generation of particles of size $m$. The selected approach for solving the agglomeration equation is to bin the particle sizes into multiple bins and transform the integrals over particle size into summations over particle bins. By defining the maximum, $m_{max}$, and minimum, $m_{min}$, particle mass and the number of bins, $M$, one can define the average bin mass, $x$, as shown below~\cite{Higgins_Davidson}.
-\be
-s = \left( \frac{m_{max}}{m_{min}} \right) ^{1/M} \; , \; m_i =s \; m_{i-1} \; , \; x_i = \frac{2 m_i}{1+s}
-\ee
-Using this binning, the agglomeration equation becomes:
-\be
-\frac{\d N_i}{\d t} = \sum_{k=1}^{M} \sum_{j=k}^{M} \left( 1- \frac{1}{2} \delta_{j,k} \right) \eta \Phi(j,k) N_j N_k - N_i \sum_{k=1}^M \Phi(j,k) N_k - R_i + S_i
-\ee
-where $\eta$, shown below, is a function for apportioning mass between adjacent particle bins.
-\be
-\eta = \begin{cases}
-	\frac{x_{i+1}-m_i}{x_{i+1}-x_i} & x_i< m_i \leq x_{i+1} \\
-    \frac{m_i-x_{i-1}}{x_i-x_{i-1}} & x_{i-1}< m_i \leq x_i
-	\end{cases}
-\ee
-The agglomeration kernel is given by the sum of the Brownian (Br), gravitational (Gr), shear (Sh), and inertial (In) agglomeration  terms.
-\be
-\Phi (m,\omega)= \Phi_{\rm Br}(m,\omega) + \Phi_{\rm Gr}(m,\omega) + \sqrt{\Phi_{\rm Sh}(m,\omega)^2 + \Phi_{\rm In}(m,\omega)^2}
-\ee
-Browian agglomeration occurs when the random walks of particles brings them into contact with one another. It is computed as~\cite{NRC:VICTORIA}:
-\be
-\Phi_{\rm Br}= 4 \pi k_{\rm b} T \left({\rm B} (m) + {\rm B} (\omega) \right) \left(r_m+r_{\omega} \right) {\rm Fu} (m,\omega)
-\ee
-where Fu is the Fuchs factor and B is the particle mobility.
-\be
-{\rm B}(m) = \frac {\rm Cn}{6 \pi \mu r_m}
-\ee
-\be \frac{1}{{\rm Fu}(m,\omega)} = \left( \epsilon_s \frac{r_m + r_{\omega}}{k_{\rm b} T \left({\rm B}(m) + {\rm B}(\omega) \right)} \sqrt {\frac{8 k_{\rm b} T}{\pi} \left(\frac{1}{m}+\frac{1}{\omega} \right)} \right)^{-1} +
-	\left( 1+\frac{2 \sqrt{(\tilde{a}_m^2+\tilde{a}_{\omega}^2)}}{r_m+r_{\omega}} \right)^{-1}
-\ee
-\be
-\tilde{a}_m = \frac { \left(r_m + a_m \right)^3 - \left(r_m^2 + a_m^2 \right)^{3/2}} {3 r_m a_m} - r_m
-\ee
-\be
-a_m= {\rm B} (m) \sqrt{ \frac{2 k_{\rm b} T m} {\pi}}
-\ee
-Gravitational agglomeration results from heavier particle falling onto larger particles. The efficiency of these collisions are governed by a sticking factor, $\epsilon_{\rm S}$ assumed to be one, and a collision efficiency, $\epsilon_{\rm PK}$~\cite{NRC:VICTORIA}
-\be
-\Phi_{\rm Gr} (m,\omega) = \epsilon_{\rm S} \epsilon_{\rm PK}(m,\omega) \left(r_m+r_{\omega} \right)^2 \left| u_g(m)-u_g(\omega) \right|
-\ee
-\be
-\epsilon_{\rm PK}(m,\omega) = \frac {{\rm min} \left(r_m,r_{\omega} \right)^2}{2 \left( r_m+r_{\omega} \right)^2}
-\ee
-\be
-u_g(m) = g m {\rm B}(m)
-\ee
-Shear agglomeration results from particles of different speeds moving along streamlines that bring them into contact with one another~\cite{NRC:VICTORIA}.
-\be
-\Phi_{\rm Sh} (m,\omega) = \epsilon_{\rm S} \epsilon_{\rm PK}(m,\omega) \chi_{\rm C}^3 \left(r_m+r_{\omega} \right)^3 \sqrt{ \frac{8 \rho \pi \epsilon} {15 \mu} }
-\ee
-where $\chi_{\rm C}$ is a shape factor, assumed to be one, and $\epsilon$ is the turbulent kinetic energy dissipation rate.
-
-Inertial agglomeration results from particles departing from the flow streamlines due to their inertia and coming into contact with other particles~\cite{NRC:VICTORIA}.
-\be
-\Phi_{\rm In} (m,\omega) = \epsilon_{\rm S} \epsilon_{\rm PK}(m,\omega) \chi_{\rm C}^2 \left(r_m+r_{\omega} \right)^2 \left( \frac{512 \rho \pi^3 \epsilon^3} {15 \mu} \right) ^{1/4} \frac{\left| u_g(m)-u_g(\omega) \right|}{g}
-\ee

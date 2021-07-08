@@ -1,3 +1,5 @@
+!> \brief Variables and subroutines pertaining to Lagrangian particles
+
 MODULE PART
 
 USE PRECISION_PARAMETERS
@@ -7,17 +9,18 @@ USE TRAN
 USE MEMORY_FUNCTIONS, ONLY: ALLOCATE_STORAGE
 USE COMP_FUNCTIONS, ONLY : CURRENT_TIME
 USE SOOT_ROUTINES, ONLY: DROPLET_SCRUBBING
-IMPLICIT NONE
+IMPLICIT NONE (TYPE,EXTERNAL)
 
 PRIVATE
+
 PUBLIC INSERT_ALL_PARTICLES,UPDATE_PARTICLES,REMOVE_PARTICLES,GENERATE_PARTICLE_DISTRIBUTIONS,PARTICLE_MOMENTUM_TRANSFER
 
 CONTAINS
 
 
-SUBROUTINE GENERATE_PARTICLE_DISTRIBUTIONS
+!> \brief Generate size distribution statistics for all particles classes
 
-! Generate size distribution statistics for all particles classes
+SUBROUTINE GENERATE_PARTICLE_DISTRIBUTIONS
 
 USE MATH_FUNCTIONS, ONLY: EVALUATE_RAMP
 USE PHYSICAL_FUNCTIONS, ONLY : PARTICLE_SIZE_DISTRIBUTION
@@ -63,7 +66,7 @@ PART_CLASS_LOOP: DO ILPC=1,N_LAGRANGIAN_CLASSES
          LL_LOOP: DO J=1,NDC
             IF (LPC%R_CNF(J)>LL) THEN
                IL = J-1
-               LPC%IL_CNF(I) = J-1
+               LPC%STRATUM_INDEX_LOWER(I) = J-1
                EXIT LL_LOOP
             ENDIF
          ENDDO LL_LOOP
@@ -71,7 +74,7 @@ PART_CLASS_LOOP: DO ILPC=1,N_LAGRANGIAN_CLASSES
          UL_LOOP: DO J=NDC,1,-1
             IF (LPC%R_CNF(J)<=UL) THEN
                IU = J
-               LPC%IU_CNF(I) = J
+               LPC%STRATUM_INDEX_UPPER(I) = J
                EXIT UL_LOOP
             ENDIF
          ENDDO UL_LOOP
@@ -111,9 +114,9 @@ T_USED(8)=T_USED(8)+CURRENT_TIME()-TNOW
 END SUBROUTINE GENERATE_PARTICLE_DISTRIBUTIONS
 
 
-SUBROUTINE INSERT_ALL_PARTICLES(T,NM)
+!> \brief Insert Lagrangian particles into the domain every time step
 
-! Insert Lagrangian particles into the domain every time step
+SUBROUTINE INSERT_ALL_PARTICLES(T,NM)
 
 USE MATH_FUNCTIONS, ONLY: EVALUATE_RAMP,RANDOM_CHOICE
 USE GEOMETRY_FUNCTIONS, ONLY: RANDOM_RECTANGLE,RANDOM_CONE,RANDOM_RING,CONE_MESH_INTERSECTION_VOLUME,UNIFORM_RING
@@ -127,7 +130,7 @@ REAL(EB) :: PHI_RN,FLOW_RATE,THETA_RN,SPHI,CPHI,MASS_SUM,D_PRES_FACTOR, &
             STHETA,CTHETA,PWT0,PARTICLE_SPEED,SHIFT1,SHIFT2,XTMP,YTMP,ZTMP,VLEN, &
             TRIGT1,TRIGT2,TNOW,TSI,PIPE_PRESSURE,X1,X2,Y1,Y2,Z1,Z2, &
             ETA,ETA_MAX,ETA_MIN,XI,YJ,ZK
-REAL(EB), PARAMETER :: VENT_OFFSET=0.1
+REAL(EB), PARAMETER :: VENT_OFFSET=0.5
 INTEGER :: IP,KS,II,JJ,KK,IC,IL,IU,ILPC,DROP_SUM,IIG,JJG,KKG,IW,IOR,STRATUM,IB,ICF
 INTEGER :: N,N_INSERT,ILAT,NEW_LP_INDEX
 INTEGER, ALLOCATABLE, DIMENSION(:) :: LP_INDEX_LOOKUP
@@ -145,6 +148,10 @@ IF (N_LAGRANGIAN_CLASSES==0) RETURN ! Don't waste time if no particles
 
 TNOW=CURRENT_TIME()
 CALL POINT_TO_MESH(NM)
+
+! Insert particles at spray nozzles (INSERT_SPRAY_PARTICLES), VENT surfaces (INSERT_VENT_PARTICLES), specified
+! volumes (INSERT_VOLUMETRIC_PARTICLES), or HVAC ducts (INSERT_DUCT_PARTICLES). If the insertions are to be made according
+! to a user-specified clock, allow the possibility via the OVERALL_INSERT_LOOP of inserting multiple sets of particles.
 
 OVERALL_INSERT_LOOP: DO
 
@@ -167,7 +174,7 @@ OVERALL_INSERT_LOOP: DO
    DO N=1,N_SURF
       SF => SURFACE(N)
       ILPC =  SF%PART_INDEX
-      IF (ILPC < 1)    CYCLE
+      IF (ILPC < 1 .AND. SF%N_LPC == 0) CYCLE
       IF (T >= SF%PARTICLE_INSERT_CLOCK(NM)) SF%PARTICLE_INSERT_CLOCK(NM) = SF%PARTICLE_INSERT_CLOCK(NM) + SF%DT_INSERT
       IF (T >= SF%PARTICLE_INSERT_CLOCK(NM)) INSERT_ANOTHER_BATCH = .TRUE.
    ENDDO
@@ -188,38 +195,40 @@ IF (PARTICLE_CFL) THEN
    ENDDO
 ENDIF
 
+! If any of the newly inserted particles finds itself in a neighboring mesh, set a flag to indicate that an MPI exchange must
+! be done to transfer that particle to the MPI process that controls the neighboring mesh.
+
+EXCHANGE_INSERTED_PARTICLES = .FALSE.
+
+DO N=1,N_NEIGHBORING_MESHES
+   IF (ANY(OMESH(NEIGHBORING_MESH(N))%N_PART_ORPHANS>0)) EXCHANGE_INSERTED_PARTICLES = .TRUE.
+ENDDO
+
 T_USED(8)=T_USED(8)+CURRENT_TIME()-TNOW
 
 CONTAINS
 
 
+!> \brief Insert droplets for sprinklers and nozzles
+
 SUBROUTINE INSERT_SPRAY_PARTICLES
 
 INTEGER :: I,OI
 
-! Count active sprinklers and nozzles
+! Loop over all devices, but look for sprinklers or nozzles. Count actuated sprinklers for output purposes.
 
-N_OPEN_NOZZLES = 0
 N_ACTUATED_SPRINKLERS = 0
-
-COUNT_OPEN_NOZZLES_LOOP: DO KS=1,N_DEVC ! Loop over all devices, but look for sprinklers or nozzles
-   DV => DEVICE(KS)
-   PY => PROPERTY(DV%PROP_INDEX)
-   IF (.NOT.DV%CURRENT_STATE) CYCLE COUNT_OPEN_NOZZLES_LOOP
-   IF (PY%PART_ID == 'null')  CYCLE COUNT_OPEN_NOZZLES_LOOP
-   N_OPEN_NOZZLES = N_OPEN_NOZZLES + 1
-   IF (PY%QUANTITY=='SPRINKLER LINK TEMPERATURE') N_ACTUATED_SPRINKLERS = N_ACTUATED_SPRINKLERS + 1
-ENDDO COUNT_OPEN_NOZZLES_LOOP
-
-! Loop over all devices, but look for sprinklers or nozzles
 
 SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
 
    DV => DEVICE(KS)
    PY => PROPERTY(DV%PROP_INDEX)
    IF (PY%PART_ID == 'null')  CYCLE SPRINKLER_INSERT_LOOP
-   IF (DV%MESH/=NM)           CYCLE SPRINKLER_INSERT_LOOP
    IF (.NOT.DV%CURRENT_STATE) CYCLE SPRINKLER_INSERT_LOOP
+   IF (PY%QUANTITY=='SPRINKLER LINK TEMPERATURE') N_ACTUATED_SPRINKLERS = N_ACTUATED_SPRINKLERS + 1
+
+   IF (DV%MESH/=NM)           CYCLE SPRINKLER_INSERT_LOOP
+
    LPC=>LAGRANGIAN_PARTICLE_CLASS(PY%PART_INDEX)
 
    IF (ABS(DV%T_CHANGE-T)<=TWO_EPSILON_EB) THEN
@@ -258,7 +267,7 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
 
    FLOW_RATE = EVALUATE_RAMP(TSI,PY%FLOW_TAU,PY%FLOW_RAMP_INDEX)*FLOW_RATE ! kg/s
 
-   IF (FLOW_RATE <= 0._EB) THEN
+   IF (FLOW_RATE <= TWO_EPSILON_EB) THEN
       DV%T = T
       CYCLE SPRINKLER_INSERT_LOOP
    ENDIF
@@ -303,7 +312,7 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
 
       LP%T_INSERT = T
       CALL RANDOM_NUMBER(RN)
-      IF (RN < 1._EB/REAL(LPC%SAMPLING,EB)) LP%SHOW = .TRUE.
+      IF (RN < 1._EB/REAL(LPC%SAMPLING_FACTOR,EB)) LP%SHOW = .TRUE.
 
       ! Randomly choose particle direction angles, theta and phi
 
@@ -314,9 +323,8 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
             FIND_ROW: DO II=1,TA%NUMBER_ROWS
                IF (REAL(RN,EB)>PY%TABLE_ROW(II)) CYCLE FIND_ROW
                EXIT FIND_ROW
-            END DO FIND_ROW
+            ENDDO FIND_ROW
             CALL RANDOM_NUMBER(RN)
-            !THETA_RN = TA%TABLE_DATA(II,1) + RN*(TA%TABLE_DATA(II,2)-TA%TABLE_DATA(II,1))
             ETA_MAX=0.5_EB*(COS(TA%TABLE_DATA(II,1))+1._EB)
             ETA_MIN=0.5_EB*(COS(TA%TABLE_DATA(II,2))+1._EB)
             ETA=ETA_MIN+(ETA_MAX-ETA_MIN)*REAL(RN,EB)
@@ -339,9 +347,11 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
                PARTICLE_SPEED = PY%PARTICLE_VELOCITY
             ENDIF
          ENDIF PICK_PATTERN
+
          PHI_RN = PHI_RN + DV%ROTATION  ! Adjust for rotation of head by rotating about z-axis
 
          !  Adjust for tilt of sprinkler pipe
+
          SPHI   = SIN(PHI_RN)
          CPHI   = COS(PHI_RN)
          STHETA = SIN(THETA_RN)
@@ -415,15 +425,21 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
             LP%V = 0._EB
             LP%Y = DV%Y
          ENDIF
-         IF (LP%X<=XS .OR. LP%X>=XF) CYCLE CHOOSE_COORDS
-         IF (LP%Y<=YS .OR. LP%Y>=YF) CYCLE CHOOSE_COORDS
-         IF (LP%Z<=ZS .OR. LP%Z>=ZF) CYCLE CHOOSE_COORDS
-         CALL GET_IJK(LP%X,LP%Y,LP%Z,NM,XI,YJ,ZK,II,JJ,KK)
-         IC = CELL_INDEX(II,JJ,KK)
-         LP%ONE_D%IIG = II
-         LP%ONE_D%JJG = JJ
-         LP%ONE_D%KKG = KK
-         IF (.NOT.SOLID(IC)) EXIT CHOOSE_COORDS
+
+         ! If the particle position is outside the current mesh, exit the loop and the particle will be sent to another mesh
+         ! or eliminated by the call to REMOVE_PARTICLES at the end of the subroutine.
+
+         IF (LP%X<=XS .OR. LP%X>=XF .OR. LP%Y<=YS .OR. LP%Y>=YF .OR. LP%Z<=ZS .OR. LP%Z>=ZF) THEN
+            EXIT CHOOSE_COORDS
+         ELSE
+            CALL GET_IJK(LP%X,LP%Y,LP%Z,NM,XI,YJ,ZK,II,JJ,KK)
+            IC = CELL_INDEX(II,JJ,KK)
+            LP%ONE_D%IIG = II
+            LP%ONE_D%JJG = JJ
+            LP%ONE_D%KKG = KK
+            IF (.NOT.SOLID(IC)) EXIT CHOOSE_COORDS
+         ENDIF
+
       ENDDO CHOOSE_COORDS
 
       ! Randomly choose PARTICLE size according to Cumulative Distribution Function (CDF)
@@ -445,12 +461,17 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
 
       MASS_SUM = MASS_SUM + LP%PWT*LP%MASS
       DROP_SUM = DROP_SUM + 1
+
    ENDDO PARTICLE_INSERT_LOOP
 
    ! Compute weighting factor for the PARTICLEs just inserted
 
    IF (DROP_SUM > 0) THEN
-      PWT0 = LPC%N_STRATA*FLOW_RATE/(LPC%DENSITY*LPC%MEAN_DROPLET_VOLUME*REAL(PY%PARTICLES_PER_SECOND,EB))/D_PRES_FACTOR**3
+      IF (LPC%LIQUID_DROPLET) THEN
+         PWT0 = LPC%N_STRATA*FLOW_RATE/(LPC%DENSITY*LPC%MEAN_DROPLET_VOLUME*REAL(PY%PARTICLES_PER_SECOND,EB))/D_PRES_FACTOR**3
+      ELSE
+         PWT0 = FLOW_RATE*REAL(DROP_SUM,EB)/(MASS_SUM*REAL(PY%PARTICLES_PER_SECOND,EB))
+      ENDIF
       DO I=1,N_INSERT
          N = LP_INDEX_LOOKUP(I)
          LAGRANGIAN_PARTICLE(N)%PWT = LAGRANGIAN_PARTICLE(N)%PWT * PWT0
@@ -465,12 +486,16 @@ SPRINKLER_INSERT_LOOP: DO KS=1,N_DEVC
 
 ENDDO SPRINKLER_INSERT_LOOP
 
+! There might be particles that were inserted outside the current mesh. Either remove them or transfer them to another mesh.
+
+CALL REMOVE_PARTICLES(T,NM)
+
 END SUBROUTINE INSERT_SPRAY_PARTICLES
 
 
-SUBROUTINE INSERT_VENT_PARTICLES
+!> \brief Loop through all boundary cells and insert particles if appropriate
 
-! Loop through all boundary cells and insert particles if appropriate
+SUBROUTINE INSERT_VENT_PARTICLES
 
 DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
    CALL PARTICLE_FACE_INSERT(WALL_INDEX=IW)
@@ -486,10 +511,12 @@ END SUBROUTINE INSERT_VENT_PARTICLES
 SUBROUTINE PARTICLE_FACE_INSERT(WALL_INDEX,CFACE_INDEX)
 
 USE COMPLEX_GEOMETRY, ONLY : RANDOM_CFACE_XYZ
-
+USE PHYSICAL_FUNCTIONS, ONLY: GET_PARTICLE_ENTHALPY
 INTEGER, INTENT(IN), OPTIONAL :: WALL_INDEX,CFACE_INDEX
-INTEGER :: I
-REAL(EB):: CFA_X, CFA_Y, CFA_Z, RN
+INTEGER :: I,N_LPC, ITER
+REAL(EB):: CFA_X, CFA_Y, CFA_Z, RN, VEL_PART, &
+           C_S, H_1, H_2, TMP_PART, TMP_GUESS
+LOGICAL :: RETURN_FLAG
 
 TYPE(CFACE_TYPE), POINTER :: CFA=>NULL()
 TYPE(WALL_TYPE), POINTER :: WC=>NULL()
@@ -514,167 +541,340 @@ ELSEIF (PRESENT(CFACE_INDEX)) THEN
    IF (CFA%BOUNDARY_TYPE/=SOLID_BOUNDARY) RETURN
 ENDIF WALL_OR_CFACE_IF_1
 
+ILPC = SF%PART_INDEX; IF (ILPC < 1 .AND. SF%N_LPC ==0) RETURN
+
 IIG = ONE_D%IIG
 JJG = ONE_D%JJG
 KKG = ONE_D%KKG
 
-IF (T < ONE_D%T_IGN)                                   RETURN
-IF (T < SF%PARTICLE_INSERT_CLOCK(NM))                  RETURN
-IF (SF%PARTICLE_SURFACE_DENSITY>0._EB .AND. T>T_BEGIN) RETURN
-ILPC = SF%PART_INDEX; IF (ILPC < 1)                    RETURN
+RETURN_FLAG = .FALSE.
 
-LPC => LAGRANGIAN_PARTICLE_CLASS(ILPC)
-IF (LPC%DEVC_INDEX>0) THEN
-   IF (.NOT.DEVICE(LPC%DEVC_INDEX)%CURRENT_STATE)      RETURN
-ENDIF
-IF (LPC%CTRL_INDEX>0) THEN
-   IF (.NOT.CONTROL(LPC%CTRL_INDEX)%CURRENT_STATE)     RETURN
-ENDIF
-IF (NM > 1) THEN
-   IF (INTERPOLATED_MESH(IIG,JJG,KKG) > 0)             RETURN
-ENDIF
+ILPC_IF: IF (ILPC > 0) THEN
 
-! Loop over all particles for the WALL_INDEX-th cell
+   IF (T < ONE_D%T_IGN)                                   RETURN
+   IF (T < SF%PARTICLE_INSERT_CLOCK(NM))                  RETURN
+   IF (SF%PARTICLE_SURFACE_DENSITY>0._EB .AND. T>T_BEGIN) RETURN
 
-MASS_SUM = 0._EB
+   LPC => LAGRANGIAN_PARTICLE_CLASS(ILPC)
 
-ALLOCATE(LP_INDEX_LOOKUP(SF%NPPC))
-LP_INDEX_LOOKUP = 0
-
-PARTICLE_INSERT_LOOP2: DO I=1,SF%NPPC
-
-   ! Insert a single droplet at wall cell WALL_INDEX or cut-cell face CFACE_INDEXF
-
-   IF (NLP+1>MAXIMUM_PARTICLES) THEN
-      CALL REMOVE_OLDEST_PARTICLE(NM,ILPC,NLP,NEW_LP_INDEX)
-      IF (I>1) LP_INDEX_LOOKUP(I-1)=NEW_LP_INDEX
-   ELSE
-      NLP = NLP+1
+   ! Evalutate if we need to skip ILPC and return if no N_LPC
+   IF (LPC%DEVC_INDEX>0) THEN
+      IF (.NOT.DEVICE(LPC%DEVC_INDEX)%CURRENT_STATE) RETURN_FLAG = .TRUE.
    ENDIF
-   LP_INDEX_LOOKUP(I) = NLP
+   IF (LPC%CTRL_INDEX>0) THEN
+      IF (.NOT.CONTROL(LPC%CTRL_INDEX)%CURRENT_STATE) RETURN_FLAG = .TRUE.
+   ENDIF
+   IF (NM > 1) THEN
+      IF (INTERPOLATED_MESH(IIG,JJG,KKG) > 0) RETURN_FLAG = .TRUE.
+   ENDIF
 
-   PARTICLE_TAG = PARTICLE_TAG + NMESHES
-   CALL ALLOCATE_STORAGE(NM,LPC%SURF_INDEX,LPC_INDEX=ILPC,LP_INDEX=NLP,TAG=PARTICLE_TAG,NEW_TAG=.TRUE.)
-   LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
-   LAGRANGIAN_PARTICLE => MESHES(NM)%LAGRANGIAN_PARTICLE
+   IF (SF%N_LPC == 0 .AND. RETURN_FLAG) RETURN
 
-   ! Assign particle position on the cell face
+   RF_IF: IF (.NOT. RETURN_FLAG) THEN
+      ! Loop over all particles for the WALL_INDEX-th cell
 
-   CALL RANDOM_NUMBER(RN)
-   CALL RANDOM_NUMBER(RN2)
+      MASS_SUM = 0._EB
 
-   WALL_OR_CFACE_IF_2: IF (PRESENT(WALL_INDEX)) THEN
-      SELECT CASE (ABS(IOR))
-         CASE(1)
-            IF (IOR== 1) LP%X = X(II)   + VENT_OFFSET*DX(II+1)
-            IF (IOR==-1) LP%X = X(II-1) - VENT_OFFSET*DX(II-1)
-            LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN,EB)
-            LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
-         CASE(2)
-            IF (IOR== 2) LP%Y = Y(JJ)   + VENT_OFFSET*DY(JJ+1)
-            IF (IOR==-2) LP%Y = Y(JJ-1) - VENT_OFFSET*DY(JJ-1)
-            LP%X = X(II-1) + DX(II)*REAL(RN,EB)
-            LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
-         CASE(3)
-            IF (IOR== 3) LP%Z = Z(KK)   + VENT_OFFSET*DZ(KK+1)
-            IF (IOR==-3) LP%Z = Z(KK-1) - VENT_OFFSET*DZ(KK-1)
-            LP%X = X(II-1) + DX(II)*REAL(RN,EB)
-            LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN2,EB)
-      END SELECT
-      ! Give particles an initial velocity
-      IF (.NOT.LPC%STATIC) THEN
-         SELECT CASE(IOR)
-            CASE( 1)
-               LP%U = -ONE_D%U_NORMAL
-               LP%V = SF%VEL_T(1)
-               LP%W = SF%VEL_T(2)
-            CASE(-1)
-               LP%U =  ONE_D%U_NORMAL
-               LP%V = SF%VEL_T(1)
-               LP%W = SF%VEL_T(2)
-            CASE( 2)
-               LP%U = SF%VEL_T(1)
-               LP%V = -ONE_D%U_NORMAL
-               LP%W = SF%VEL_T(2)
-            CASE(-2)
-               LP%U = SF%VEL_T(1)
-               LP%V =  ONE_D%U_NORMAL
-               LP%W = SF%VEL_T(2)
-            CASE( 3)
-               LP%U = SF%VEL_T(1)
-               LP%V = SF%VEL_T(2)
-               LP%W = -ONE_D%U_NORMAL
-            CASE(-3)
-               LP%U = SF%VEL_T(1)
-               LP%V = SF%VEL_T(2)
-               LP%W =  ONE_D%U_NORMAL
-         END SELECT
+      ALLOCATE(LP_INDEX_LOOKUP(SF%NPPC))
+      LP_INDEX_LOOKUP = 0
+
+      PARTICLE_INSERT_LOOP2: DO I=1,SF%NPPC
+
+         ! Insert a single droplet at wall cell WALL_INDEX or cut-cell face CFACE_INDEXF
+
+         IF (NLP+1>MAXIMUM_PARTICLES) THEN
+            CALL REMOVE_OLDEST_PARTICLE(NM,ILPC,NLP,NEW_LP_INDEX)
+            IF (I>1) LP_INDEX_LOOKUP(I-1)=NEW_LP_INDEX
+         ELSE
+            NLP = NLP+1
+         ENDIF
+         LP_INDEX_LOOKUP(I) = NLP
+
+         PARTICLE_TAG = PARTICLE_TAG + NMESHES
+         CALL ALLOCATE_STORAGE(NM,LPC%SURF_INDEX,LPC_INDEX=ILPC,LP_INDEX=NLP,TAG=PARTICLE_TAG,NEW_TAG=.TRUE.)
+         LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
+         LAGRANGIAN_PARTICLE => MESHES(NM)%LAGRANGIAN_PARTICLE
+
+         ! Assign particle position on the cell face
+
+         CALL RANDOM_NUMBER(RN)
+         CALL RANDOM_NUMBER(RN2)
+
+         WALL_OR_CFACE_IF_2: IF (PRESENT(WALL_INDEX)) THEN
+            SELECT CASE (ABS(IOR))
+               CASE(1)
+                  IF (IOR== 1) LP%X = X(II)   + VENT_OFFSET*DX(II+1)
+                  IF (IOR==-1) LP%X = X(II-1) - VENT_OFFSET*DX(II-1)
+                  LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN,EB)
+                  LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
+               CASE(2)
+                  IF (IOR== 2) LP%Y = Y(JJ)   + VENT_OFFSET*DY(JJ+1)
+                  IF (IOR==-2) LP%Y = Y(JJ-1) - VENT_OFFSET*DY(JJ-1)
+                  LP%X = X(II-1) + DX(II)*REAL(RN,EB)
+                  LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
+               CASE(3)
+                  IF (IOR== 3) LP%Z = Z(KK)   + VENT_OFFSET*DZ(KK+1)
+                  IF (IOR==-3) LP%Z = Z(KK-1) - VENT_OFFSET*DZ(KK-1)
+                  LP%X = X(II-1) + DX(II)*REAL(RN,EB)
+                  LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN2,EB)
+            END SELECT
+            ! Give particles an initial velocity
+            IF (.NOT.LPC%STATIC) THEN
+               IF (SF%VEL_PART >-999999._EB) THEN
+                  VEL_PART = SF%VEL_PART
+               ELSE
+                  VEL_PART = ONE_D%U_NORMAL
+               ENDIF
+               SELECT CASE(IOR)
+                  CASE( 1)
+                     LP%U = -VEL_PART
+                     LP%V = SF%VEL_T(1)
+                     LP%W = SF%VEL_T(2)
+                  CASE(-1)
+                     LP%U =  VEL_PART
+                     LP%V = SF%VEL_T(1)
+                     LP%W = SF%VEL_T(2)
+                  CASE( 2)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = -VEL_PART
+                     LP%W = SF%VEL_T(2)
+                  CASE(-2)
+                     LP%U = SF%VEL_T(1)
+                     LP%V =  VEL_PART
+                     LP%W = SF%VEL_T(2)
+                  CASE( 3)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = SF%VEL_T(2)
+                     LP%W = -VEL_PART
+                  CASE(-3)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = SF%VEL_T(2)
+                     LP%W =  VEL_PART
+               END SELECT
+            ENDIF
+         ELSEIF (PRESENT(CFACE_INDEX)) THEN
+            CALL RANDOM_CFACE_XYZ(CFA,CFA_X,CFA_Y,CFA_Z)
+            LP%X = CFA_X + CFA%NVEC(1)*VENT_OFFSET*DX(IIG)
+            LP%Y = CFA_Y + CFA%NVEC(2)*VENT_OFFSET*DY(JJG)
+            LP%Z = CFA_Z + CFA%NVEC(3)*VENT_OFFSET*DZ(KKG)
+            LP%U = DOT_PRODUCT(CFA%NVEC,(/-ONE_D%U_NORMAL,SF%VEL_T(1),SF%VEL_T(2)/))
+            LP%V = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),-ONE_D%U_NORMAL,SF%VEL_T(2)/))
+            LP%W = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),SF%VEL_T(2),-ONE_D%U_NORMAL/))
+         ENDIF WALL_OR_CFACE_IF_2
+
+         LP%ONE_D%IIG = IIG
+         LP%ONE_D%JJG = JJG
+         LP%ONE_D%KKG = KKG
+
+         ! Save the insertion time (TP) and scalar property (SP) for the particle
+
+         CALL RANDOM_NUMBER(RN)
+         IF (RN < 1._EB/REAL(LPC%SAMPLING_FACTOR,EB)) LP%SHOW = .TRUE.
+         LP%T_INSERT = T
+
+         CALL INITIALIZE_SINGLE_PARTICLE
+
+         LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
+         IF (.NOT.LPC%MASSLESS_TRACER .AND. .NOT.LPC%MASSLESS_TARGET) THEN
+            MASS_SUM = MASS_SUM + LP%PWT*LP%MASS
+         ENDIF
+
+      ENDDO PARTICLE_INSERT_LOOP2
+
+      ! Adjust the particle weighting factors to get the right mass flux
+
+      IF (MASS_SUM > 0._EB) THEN
+         IF (SF%PARTICLE_MASS_FLUX > 0._EB) THEN
+            IF (ABS(ONE_D%T_IGN-T_BEGIN)<=TWO_EPSILON_EB .AND. SF%RAMP_INDEX(TIME_PART)>=1) THEN
+               TSI = T
+            ELSE
+               TSI = T - ONE_D%T_IGN
+            ENDIF
+            FLOW_RATE = EVALUATE_RAMP(TSI,SF%TAU(TIME_PART),SF%RAMP_INDEX(TIME_PART))*SF%PARTICLE_MASS_FLUX
+            DO I=1,SF%NPPC
+               N = LP_INDEX_LOOKUP(I)
+               LP => LAGRANGIAN_PARTICLE(N)
+               LP%PWT = LP%PWT * FLOW_RATE*ONE_D%AREA_ADJUST*ONE_D%AREA*SF%DT_INSERT/MASS_SUM
+            ENDDO
+         ELSEIF (SF%PARTICLE_SURFACE_DENSITY > 0._EB) THEN
+            DO I=1,SF%NPPC
+               N = LP_INDEX_LOOKUP(I)
+               LP => LAGRANGIAN_PARTICLE(N)
+               LP%PWT = LP%PWT * SF%PARTICLE_SURFACE_DENSITY*ONE_D%AREA_ADJUST*ONE_D%AREA/MASS_SUM
+            ENDDO
+         ENDIF
       ENDIF
-   ELSEIF (PRESENT(CFACE_INDEX)) THEN
-      CALL RANDOM_CFACE_XYZ(CFA,CFA_X,CFA_Y,CFA_Z)
-      LP%X = CFA_X + CFA%NVEC(1)*VENT_OFFSET*DX(IIG)
-      LP%Y = CFA_Y + CFA%NVEC(2)*VENT_OFFSET*DY(JJG)
-      LP%Z = CFA_Z + CFA%NVEC(3)*VENT_OFFSET*DZ(KKG)
-      LP%U = DOT_PRODUCT(CFA%NVEC,(/-ONE_D%U_NORMAL,SF%VEL_T(1),SF%VEL_T(2)/))
-      LP%V = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),-ONE_D%U_NORMAL,SF%VEL_T(2)/))
-      LP%W = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),SF%VEL_T(2),-ONE_D%U_NORMAL/))
-   ENDIF WALL_OR_CFACE_IF_2
+      DEALLOCATE(LP_INDEX_LOOKUP)
+   ENDIF RF_IF
+ENDIF ILPC_IF
 
-   LP%ONE_D%IIG = IIG
-   LP%ONE_D%JJG = JJG
-   LP%ONE_D%KKG = KKG
+N_LPC_IF: IF (SF%N_LPC>0) THEN
 
-   ! Save the insertion time (TP) and scalar property (SP) for the particle
+   IF (T < SF%PARTICLE_INSERT_CLOCK(NM)) RETURN
 
-   CALL RANDOM_NUMBER(RN)
-   IF (RN < 1._EB/REAL(LPC%SAMPLING,EB)) LP%SHOW = .TRUE.
-   LP%T_INSERT = T
+   ALLOCATE(LP_INDEX_LOOKUP(SF%NPPC))
 
-   CALL INITIALIZE_SINGLE_PARTICLE
+   LPC_LOOP: DO N_LPC = 1, SF%N_LPC
+      LP_INDEX_LOOKUP = 0
 
-   LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
-   ! SF=>SURFACE(LPC%SURF_INDEX) ! pretty sure this is not needed, will delete after firebot run
-   IF (.NOT.LPC%MASSLESS_TRACER .AND. .NOT.LPC%MASSLESS_TARGET) THEN
-      MASS_SUM = MASS_SUM + LP%PWT*LP%MASS
-   ENDIF
+      IF (ONE_D%PART_MASS(N_LPC) < TWO_EPSILON_EB) CYCLE
+      LPC => LAGRANGIAN_PARTICLE_CLASS(SF%MATL_PART_INDEX(N_LPC))
 
-ENDDO PARTICLE_INSERT_LOOP2
+      ! Get particle temperature
+      TMP_GUESS = ONE_D%TMP(1)
+      H_1 = ONE_D%PART_ENTHALPY(N_LPC)/ONE_D%PART_MASS(N_LPC)
+      C_S = H_1/TMP_GUESS
+      ITER = 0
+      T_SEARCH: DO
+         ITER = ITER + 1
+         H_2 = GET_PARTICLE_ENTHALPY(SF%MATL_PART_INDEX(N_LPC),TMP_GUESS)
+         C_S = H_2/TMP_GUESS
+         TMP_PART = TMP_GUESS - (H_2 - H_1)/C_S
+         IF (ABS(TMP_PART - TMP_GUESS) < 0.0001_EB) EXIT T_SEARCH
+         IF (ITER > 20) THEN
+            TMP_PART = 0.5_EB*(TMP_PART+TMP_GUESS)
+            EXIT T_SEARCH
+         ENDIF
+         TMP_GUESS = TMP_PART
+      ENDDO T_SEARCH
 
-! Adjust the particle weighting factors to get the right mass flux
+      ! Loop over all particles for the WALL_INDEX-th cell
 
-IF (MASS_SUM > 0._EB) THEN
-   IF (SF%PARTICLE_MASS_FLUX > 0._EB) THEN
-      IF (ABS(ONE_D%T_IGN-T_BEGIN)<=TWO_EPSILON_EB .AND. SF%RAMP_INDEX(TIME_PART)>=1) THEN
-         TSI = T
-      ELSE
-         TSI = T - ONE_D%T_IGN
+      MASS_SUM = 0._EB
+
+      PARTICLE_INSERT_LOOP2A: DO I=1,SF%NPPC
+
+         ! Insert a single droplet at wall cell WALL_INDEX or cut-cell face CFACE_INDEXF
+
+         IF (NLP+1>MAXIMUM_PARTICLES) THEN
+            CALL REMOVE_OLDEST_PARTICLE(NM,SF%MATL_PART_INDEX(N_LPC),NLP,NEW_LP_INDEX)
+            IF (I>1) LP_INDEX_LOOKUP(I-1)=NEW_LP_INDEX
+         ELSE
+            NLP = NLP+1
+         ENDIF
+         LP_INDEX_LOOKUP(I) = NLP
+
+         PARTICLE_TAG = PARTICLE_TAG + NMESHES
+         CALL ALLOCATE_STORAGE(NM,LPC%SURF_INDEX,LPC_INDEX=SF%MATL_PART_INDEX(N_LPC),LP_INDEX=NLP,TAG=PARTICLE_TAG,NEW_TAG=.TRUE.)
+         LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
+         LAGRANGIAN_PARTICLE => MESHES(NM)%LAGRANGIAN_PARTICLE
+
+         ! Assign particle position on the cell face
+
+         CALL RANDOM_NUMBER(RN)
+         CALL RANDOM_NUMBER(RN2)
+
+         WALL_OR_CFACE_IF_2A: IF (PRESENT(WALL_INDEX)) THEN
+            SELECT CASE (ABS(IOR))
+               CASE(1)
+                  IF (IOR== 1) LP%X = X(II)   + VENT_OFFSET*DX(II+1)
+                  IF (IOR==-1) LP%X = X(II-1) - VENT_OFFSET*DX(II-1)
+                  LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN,EB)
+                  LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
+               CASE(2)
+                  IF (IOR== 2) LP%Y = Y(JJ)   + VENT_OFFSET*DY(JJ+1)
+                  IF (IOR==-2) LP%Y = Y(JJ-1) - VENT_OFFSET*DY(JJ-1)
+                  LP%X = X(II-1) + DX(II)*REAL(RN,EB)
+                  LP%Z = Z(KK-1) + DZ(KK)*REAL(RN2,EB)
+               CASE(3)
+                  IF (IOR== 3) LP%Z = Z(KK)   + VENT_OFFSET*DZ(KK+1)
+                  IF (IOR==-3) LP%Z = Z(KK-1) - VENT_OFFSET*DZ(KK-1)
+                  LP%X = X(II-1) + DX(II)*REAL(RN,EB)
+                  LP%Y = Y(JJ-1) + DY(JJ)*REAL(RN2,EB)
+            END SELECT
+            ! Give particles an initial velocity
+            IF (.NOT.LPC%STATIC) THEN
+               IF (SF%VEL_PART >-999999._EB) THEN
+                  VEL_PART = SF%VEL_PART
+               ELSE
+                  VEL_PART = ONE_D%U_NORMAL
+               ENDIF
+               SELECT CASE(IOR)
+                  CASE( 1)
+                     LP%U = -VEL_PART
+                     LP%V = SF%VEL_T(1)
+                     LP%W = SF%VEL_T(2)
+                  CASE(-1)
+                     LP%U =  VEL_PART
+                     LP%V = SF%VEL_T(1)
+                     LP%W = SF%VEL_T(2)
+                  CASE( 2)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = -VEL_PART
+                     LP%W = SF%VEL_T(2)
+                  CASE(-2)
+                     LP%U = SF%VEL_T(1)
+                     LP%V =  VEL_PART
+                     LP%W = SF%VEL_T(2)
+                  CASE( 3)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = SF%VEL_T(2)
+                     LP%W = -VEL_PART
+                  CASE(-3)
+                     LP%U = SF%VEL_T(1)
+                     LP%V = SF%VEL_T(2)
+                     LP%W =  VEL_PART
+               END SELECT
+            ENDIF
+         ELSEIF (PRESENT(CFACE_INDEX)) THEN
+            CALL RANDOM_CFACE_XYZ(CFA,CFA_X,CFA_Y,CFA_Z)
+            LP%X = CFA_X + CFA%NVEC(1)*VENT_OFFSET*DX(IIG)
+            LP%Y = CFA_Y + CFA%NVEC(2)*VENT_OFFSET*DY(JJG)
+            LP%Z = CFA_Z + CFA%NVEC(3)*VENT_OFFSET*DZ(KKG)
+            LP%U = DOT_PRODUCT(CFA%NVEC,(/-ONE_D%U_NORMAL,SF%VEL_T(1),SF%VEL_T(2)/))
+            LP%V = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),-ONE_D%U_NORMAL,SF%VEL_T(2)/))
+            LP%W = DOT_PRODUCT(CFA%NVEC,(/SF%VEL_T(1),SF%VEL_T(2),-ONE_D%U_NORMAL/))
+         ENDIF WALL_OR_CFACE_IF_2A
+
+         LP%ONE_D%IIG = IIG
+         LP%ONE_D%JJG = JJG
+         LP%ONE_D%KKG = KKG
+
+         ! Save the insertion time (TP) and scalar property (SP) for the particle
+
+         CALL RANDOM_NUMBER(RN)
+         IF (RN < 1._EB/REAL(LPC%SAMPLING_FACTOR,EB)) LP%SHOW = .TRUE.
+         LP%T_INSERT = T
+
+         CALL INITIALIZE_SINGLE_PARTICLE
+
+         LP=>MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
+         LP%ONE_D%TMP = TMP_PART
+         MASS_SUM = MASS_SUM + LP%PWT*LP%MASS
+
+
+      ENDDO PARTICLE_INSERT_LOOP2A
+
+      ! Adjust the particle weighting factors to get the right mass flux
+
+      IF (MASS_SUM > 0._EB) THEN
+         DO I=1,SF%NPPC
+            N = LP_INDEX_LOOKUP(I)
+            LP => LAGRANGIAN_PARTICLE(N)
+            LP%PWT = LP%PWT * ONE_D%PART_MASS(N_LPC)*ONE_D%AREA_ADJUST*ONE_D%AREA*MIN(1._EB,SF%DT_INSERT/ONE_D%T_MATL_PART)/MASS_SUM
+         ENDDO
       ENDIF
-      FLOW_RATE = EVALUATE_RAMP(TSI,SF%TAU(TIME_PART),SF%RAMP_INDEX(TIME_PART))*SF%PARTICLE_MASS_FLUX
-      DO I=1,SF%NPPC
-         N = LP_INDEX_LOOKUP(I)
-         LP => LAGRANGIAN_PARTICLE(N)
-         LP%PWT = LP%PWT * FLOW_RATE*ONE_D%AREA_ADJUST*ONE_D%AREA*SF%DT_INSERT/MASS_SUM
-      ENDDO
-   ELSEIF (SF%PARTICLE_SURFACE_DENSITY > 0._EB) THEN
-      DO I=1,SF%NPPC
-         N = LP_INDEX_LOOKUP(I)
-         LP => LAGRANGIAN_PARTICLE(N)
-         LP%PWT = LP%PWT * SF%PARTICLE_SURFACE_DENSITY*ONE_D%AREA_ADJUST*ONE_D%AREA/MASS_SUM
-      ENDDO
-   ENDIF
-ENDIF
 
-DEALLOCATE(LP_INDEX_LOOKUP)
+   ENDDO LPC_LOOP
+
+   DEALLOCATE(LP_INDEX_LOOKUP)
+
+   ! Decrement mass, enthalpy, and aggregation time for current insertion interval
+   ONE_D%PART_MASS = MAX(0._EB,1-SF%DT_INSERT/(ONE_D%T_MATL_PART+TINY_EB))*ONE_D%PART_MASS
+   ONE_D%PART_ENTHALPY = MAX(0._EB,1-SF%DT_INSERT/(ONE_D%T_MATL_PART+TINY_EB))*ONE_D%PART_ENTHALPY
+   ONE_D%T_MATL_PART = MAX(0._EB,ONE_D%T_MATL_PART-SF%DT_INSERT)
+ENDIF N_LPC_IF
 
 END SUBROUTINE PARTICLE_FACE_INSERT
 
 
+!> \brief Loop over all INIT lines and look for particles inserted within a specified volume
+
 SUBROUTINE INSERT_VOLUMETRIC_PARTICLES
 
-! Loop over all INIT lines and look for particles inserted within a specified volume
-
 INTEGER :: IIP,N_INSERT,I1,J1,K1,I2,J2,K2,N,N_PARTICLES_INSERT
-REAL(EB) :: XC1,XC2,YC1,YC2,ZC1,ZC2,X0,Y0,Z0,RR,HH,INSERT_VOLUME,INPUT_VOLUME,LP_X,LP_Y,LP_Z
+REAL(EB) :: XC1,XC2,YC1,YC2,ZC1,ZC2,X0,Y0,Z0,RR,HH,INSERT_VOLUME,INPUT_VOLUME,VOLUME_SPLIT_FACTOR,LP_X,LP_Y,LP_Z,&
+            DUMMY=0._EB,RAMP_FACTOR
 
 VOLUME_INSERT_LOOP: DO IB=1,N_INIT
 
@@ -684,7 +884,16 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
 
    ILPC = IN%PART_INDEX
    IF (ILPC<1) CYCLE VOLUME_INSERT_LOOP
-   IF ((IN%SINGLE_INSERTION.AND.IN%ALREADY_INSERTED(NM)) .OR. T<IN%T_INSERT) CYCLE VOLUME_INSERT_LOOP
+   IF (IN%SINGLE_INSERTION .AND. IN%ALREADY_INSERTED(NM)) CYCLE VOLUME_INSERT_LOOP
+
+   ! If there is a RAMP for MASS_PER_TIME or MASS_PER_VOLUME, evaluate it now and if zero, cycle.
+
+   IF (IN%RAMP_PART_INDEX>0) THEN
+      RAMP_FACTOR = EVALUATE_RAMP(T,DUMMY,IN%RAMP_PART_INDEX)
+      IF (RAMP_FACTOR<TWO_EPSILON_EB) CYCLE
+   ELSE
+      RAMP_FACTOR = 1._EB
+   ENDIF
 
    ! Determine if the particles/PARTICLEs are controlled by devices
 
@@ -727,14 +936,19 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
       CASE('BLOCK')
          INSERT_VOLUME = (X2-X1)*(Y2-Y1)*(Z2-Z1)
          INPUT_VOLUME  = (IN%X2-IN%X1)*(IN%Y2-IN%Y1)*(IN%Z2-IN%Z1)
-      CASE('CONE')
+      CASE('CONE','CYLINDER')
          X0 = 0.5_EB*(IN%X1+IN%X2)
          Y0 = 0.5_EB*(IN%Y1+IN%Y2)
          Z0 = IN%Z1
          RR = 0.5_EB*(IN%X2-IN%X1)
          HH = IN%Z2-IN%Z1
-         INSERT_VOLUME = CONE_MESH_INTERSECTION_VOLUME(NM,X0,Y0,Z0,RR,HH)
-         INPUT_VOLUME  = PI*(0.5_EB*(IN%X2-IN%X1))**2*(IN%Z2-IN%Z1)/3._EB
+         IF (IN%SHAPE=='CONE') THEN
+            INSERT_VOLUME = CONE_MESH_INTERSECTION_VOLUME(NM,X0,Y0,Z0,RR,HH,1)
+            INPUT_VOLUME  = PI*(0.5_EB*(IN%X2-IN%X1))**2*(IN%Z2-IN%Z1)/3._EB
+         ELSE
+            INSERT_VOLUME = CONE_MESH_INTERSECTION_VOLUME(NM,X0,Y0,Z0,RR,HH,0)
+            INPUT_VOLUME  = PI*(0.5_EB*(IN%X2-IN%X1))**2*(IN%Z2-IN%Z1)
+         ENDIF
       CASE('RING','LINE')
          INSERT_VOLUME = 0._EB
          INPUT_VOLUME  = 0._EB
@@ -775,13 +989,14 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
             SELECT CASE(IN%SHAPE)
                CASE('BLOCK')
                   CALL RANDOM_RECTANGLE(LP_X,LP_Y,LP_Z,X1,X2,Y1,Y2,Z1,Z2)
-               CASE('CONE')
+               CASE('CONE','CYLINDER')
                   X0 = 0.5_EB*(IN%X1+IN%X2)
                   Y0 = 0.5_EB*(IN%Y1+IN%Y2)
                   Z0 = IN%Z1
                   RR = 0.5_EB*(IN%X2-IN%X1)
                   HH = IN%Z2-IN%Z1
-                  CALL RANDOM_CONE(NM,LP_X,LP_Y,LP_Z,X0,Y0,Z0,RR,HH)
+                  IF (IN%SHAPE=='CONE')     CALL RANDOM_CONE(NM,LP_X,LP_Y,LP_Z,X0,Y0,Z0,RR,HH,1)
+                  IF (IN%SHAPE=='CYLINDER') CALL RANDOM_CONE(NM,LP_X,LP_Y,LP_Z,X0,Y0,Z0,RR,HH,0)
                CASE('RING')
                   X0 = 0.5_EB*(IN%X1+IN%X2)
                   Y0 = 0.5_EB*(IN%Y1+IN%Y2)
@@ -870,6 +1085,9 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
                IF (IN%SHAPE=='CONE') THEN
                   IF ((XC(II)-X0)**2+(YC(JJ)-Y0)**2>(RR*(1._EB-(ZC(KK)-Z0)/HH))**2) CYCLE II_LOOP
                ENDIF
+               IF (IN%SHAPE=='CYLINDER') THEN
+                  IF ((XC(II)-X0)**2+(YC(JJ)-Y0)**2>RR**2) CYCLE II_LOOP
+               ENDIF
                INSERT_VOLUME = INSERT_VOLUME + (MIN(X(II),IN%X2)-MAX(X(II-1),IN%X1)) &
                                              * (MIN(Y(JJ),IN%Y2)-MAX(Y(JJ-1),IN%Y1)) &
                                              * (MIN(Z(KK),IN%Z2)-MAX(Z(KK-1),IN%Z1))
@@ -931,13 +1149,15 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
       ! Adjust particle weighting factor PWT so that desired MASS_PER_VOLUME is achieved
 
       IF (IN%MASS_PER_TIME>0._EB) THEN
-         PWT0 = IN%MASS_PER_TIME*IN%DT_INSERT/MASS_SUM
+         VOLUME_SPLIT_FACTOR = 1._EB
+         IF (INPUT_VOLUME>TWO_EPSILON_EB .AND. INSERT_VOLUME>TWO_EPSILON_EB) VOLUME_SPLIT_FACTOR = INSERT_VOLUME/INPUT_VOLUME
+         PWT0 = VOLUME_SPLIT_FACTOR*RAMP_FACTOR*IN%MASS_PER_TIME*IN%DT_INSERT/MASS_SUM
       ELSEIF (IN%MASS_PER_VOLUME>0._EB) THEN
-         PWT0 = IN%MASS_PER_VOLUME*INSERT_VOLUME/MASS_SUM
+         PWT0 = RAMP_FACTOR*IN%MASS_PER_VOLUME*INSERT_VOLUME/MASS_SUM
       ELSE
          PWT0 = IN%PARTICLE_WEIGHT_FACTOR
       ENDIF
-   
+
       DO IIP=1,MIN(MAXIMUM_PARTICLES,N_INSERT)
          IP = LP_INDEX_LOOKUP(IIP)
          LP => LAGRANGIAN_PARTICLE(IP)
@@ -951,9 +1171,9 @@ VOLUME_INSERT_LOOP: DO IB=1,N_INIT
       ENDDO
 
    ENDIF
-   
+
    DEALLOCATE(LP_INDEX_LOOKUP)
-   
+
    IN%ALREADY_INSERTED(NM) = .TRUE.
 
 ENDDO VOLUME_INSERT_LOOP
@@ -961,16 +1181,17 @@ ENDDO VOLUME_INSERT_LOOP
 END SUBROUTINE INSERT_VOLUMETRIC_PARTICLES
 
 
+!> \brief Place holder for inserting particles for duct heat transfer
+
 SUBROUTINE INSERT_DUCT_PARTICLES
-! Place holder for inserting particles for duct heat transfer
 IF (DUCT_HT_INSERTED) RETURN
 DUCT_HT_INSERTED = .TRUE.
 END SUBROUTINE INSERT_DUCT_PARTICLES
 
 
-SUBROUTINE VOLUME_INIT_PARTICLE
+!> \brief Initialize particle indices and velocity
 
-! Initialize particle indices and velocity
+SUBROUTINE VOLUME_INIT_PARTICLE
 
 USE OUTPUT_DATA, ONLY: N_PROF
 INTEGER :: ND
@@ -1042,7 +1263,7 @@ ENDIF
 
 LP%T_INSERT = T
 CALL RANDOM_NUMBER(RN)
-IF (RN < 1._EB/REAL(LPC%SAMPLING,EB)) LP%SHOW = .TRUE.
+IF (RN < 1._EB/REAL(LPC%SAMPLING_FACTOR,EB)) LP%SHOW = .TRUE.
 
 ! Get the particle ORIENTATION from the PART line
 
@@ -1057,11 +1278,13 @@ IF (IN%ID/='null') THEN
    DO ND=1,N_DEVC
       DV => DEVICE(ND)
       IF (IN%ID==DV%INIT_ID) THEN ! the INIT line is referred to be the DEVC line
-         IF (DV%QUANTITY=='RADIATIVE HEAT FLUX' .OR. &
-             DV%QUANTITY=='RADIANCE' .OR. &
-             DV%QUANTITY=='ADIABATIC SURFACE TEMPERATURE') THEN
+         IF (DV%QUANTITY(1)=='RADIATIVE HEAT FLUX' .OR. &
+             DV%QUANTITY(1)=='GAUGE HEAT FLUX' .OR. &
+             DV%QUANTITY(1)=='RADIANCE' .OR. &
+             DV%QUANTITY(1)=='ADIABATIC SURFACE TEMPERATURE') THEN
             IF (LPC%ID=='RESERVED TARGET PARTICLE') THEN  ! use the orientation of the DEVC
                LP%ORIENTATION_INDEX = DV%ORIENTATION_INDEX
+               LP%PROP_INDEX = DV%PROP_INDEX
                LP%PWT = 1._EB
             ENDIF
             IF (DV%PROP_INDEX>0) THEN
@@ -1083,9 +1306,11 @@ MASS_SUM = MASS_SUM + LP%PWT*LP%MASS ! if r=0 the sum will stay 0
 END SUBROUTINE VOLUME_INIT_PARTICLE
 
 
+!> \brief Set up the properties of a single, newly inserted particle
+
 SUBROUTINE INITIALIZE_SINGLE_PARTICLE
 
-REAL(EB) :: X1,X2,AREA,LENGTH,SCALE_FACTOR,RADIUS,MPUA,LP_VOLUME
+REAL(EB) :: X1,X2,AREA,LENGTH,SCALE_FACTOR,RADIUS,MPUA,LP_VOLUME,X_POS
 INTEGER :: N,I
 TYPE (ONE_D_M_AND_E_XFER_TYPE), POINTER :: ONE_D=>NULL()
 
@@ -1110,17 +1335,17 @@ IF (LPC%SOLID_PARTICLE) THEN
                  ABS(ORIENTATION_VECTOR(3,LPC%ORIENTATION_INDEX))*DX(ONE_D%IIG)*DY(ONE_D%JJG)) * &
                  LAGRANGIAN_PARTICLE_CLASS(LP%CLASS_INDEX)%FREE_AREA_FRACTION
          SELECT CASE (SF%GEOMETRY)
-            CASE (SURF_CARTESIAN,SURF_BLOWING_PLATE)
+            CASE (SURF_CARTESIAN)
                LP%ONE_D%AREA = AREA
-               IF (SF%THERMALLY_THICK) THEN
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
                   DO N=1,SF%N_LAYERS
                      LP%MASS = LP%MASS + AREA*SF%LAYER_THICKNESS(N)*SF%LAYER_DENSITY(N)
                   END DO
                ENDIF
             CASE (SURF_CYLINDRICAL)
                LP%ONE_D%AREA = AREA*PI
-               IF (SF%THERMALLY_THICK) THEN
-                  X1 = SUM(SF%LAYER_THICKNESS)
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
+                  X1 = SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS
                   LENGTH = AREA / (2._EB*X1)
                   DO N=SF%N_LAYERS,1,-1
                      X2 = X1 - SF%LAYER_THICKNESS(N)
@@ -1130,8 +1355,8 @@ IF (LPC%SOLID_PARTICLE) THEN
                ENDIF
             CASE (SURF_SPHERICAL)
                LP%ONE_D%AREA = AREA*4._EB
-               IF (SF%THERMALLY_THICK) THEN
-                  X1 = SUM(SF%LAYER_THICKNESS)
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
+                  X1 = SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS
                   LP%PWT = AREA/(PI*X1**2)
                   DO N=SF%N_LAYERS,1,-1
                      X2 = X1 - SF%LAYER_THICKNESS(N)
@@ -1150,16 +1375,16 @@ IF (LPC%SOLID_PARTICLE) THEN
          SELECT CASE (SF%GEOMETRY)
             CASE (SURF_CARTESIAN)
                LP%ONE_D%AREA = LP_VOLUME/SF%THICKNESS
-               IF (SF%THERMALLY_THICK) THEN
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
                   DO N=1,SF%N_LAYERS
                      LP%MASS = LP%MASS + SF%LAYER_THICKNESS(N)*SF%LAYER_DENSITY(N)
                   END DO
                   LP%MASS = LP%MASS*LP%ONE_D%AREA
                ENDIF
             CASE (SURF_CYLINDRICAL)
-               LP%ONE_D%AREA = 2._EB*LP_VOLUME/SF%THICKNESS
-               IF (SF%THERMALLY_THICK) THEN
-                  X1 = SUM(SF%LAYER_THICKNESS)
+               LP%ONE_D%AREA = 2._EB*LP_VOLUME/(SF%THICKNESS+SF%INNER_RADIUS)
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
+                  X1 = SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS
                   LENGTH = LP_VOLUME/(PI*X1**2)
                   DO N=SF%N_LAYERS,1,-1
                      X2 = X1 - SF%LAYER_THICKNESS(N)
@@ -1168,10 +1393,10 @@ IF (LPC%SOLID_PARTICLE) THEN
                   END DO
                ENDIF
             CASE (SURF_SPHERICAL)
-               LP%ONE_D%AREA = 3._EB*LP_VOLUME/SF%THICKNESS
+               LP%ONE_D%AREA = 3._EB*LP_VOLUME/(SF%THICKNESS+SF%INNER_RADIUS)
                LP%PWT = LP%ONE_D%AREA/(4._EB*PI*SF%THICKNESS**2)
-               IF (SF%THERMALLY_THICK) THEN
-                  X1 = SUM(SF%LAYER_THICKNESS)
+               IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
+                  X1 = SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS
                   DO N=SF%N_LAYERS,1,-1
                      X2 = X1 - SF%LAYER_THICKNESS(N)
                      LP%MASS = LP%MASS + SF%LAYER_DENSITY(N)*FOTHPI*(X1**3-X2**3)
@@ -1191,22 +1416,25 @@ IF (LPC%SOLID_PARTICLE) THEN
             SCALE_FACTOR = 1._EB
          ENDIF
 
-         IF (SF%THERMALLY_THICK) THEN
+         IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
             SELECT CASE (SF%GEOMETRY)
                CASE (SURF_CARTESIAN)
+                  LP%ONE_D%AREA = 2._EB*SF%LENGTH*SF%WIDTH
                   DO N=1,SF%N_LAYERS
                      LP%MASS = LP%MASS + 2._EB*SF%LENGTH*SF%WIDTH*SF%LAYER_THICKNESS(N)*SCALE_FACTOR*SF%LAYER_DENSITY(N)
                   ENDDO
                CASE (SURF_CYLINDRICAL)
-                  X1 = SUM(SF%LAYER_THICKNESS)*SCALE_FACTOR
-                  DO N=SF%N_LAYERS,1,-1
+                  LP%ONE_D%AREA = 2._EB*PI*(SF%THICKNESS+SF%INNER_RADIUS)*SF%LENGTH
+                  X1 = (SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS)*SCALE_FACTOR
+                  DO N=1,SF%N_LAYERS
                      X2 = X1 - SF%LAYER_THICKNESS(N)*SCALE_FACTOR
                      LP%MASS = LP%MASS + SF%LENGTH*SF%LAYER_DENSITY(N)*PI*(X1**2-X2**2)
                      X1 = X2
                   ENDDO
                CASE (SURF_SPHERICAL)
-                  X1 = SUM(SF%LAYER_THICKNESS)*SCALE_FACTOR
-                  DO N=SF%N_LAYERS,1,-1
+                  LP%ONE_D%AREA = 4._EB*PI*(SF%THICKNESS+SF%INNER_RADIUS)**2
+                  X1 = (SUM(SF%LAYER_THICKNESS)+SF%INNER_RADIUS)*SCALE_FACTOR
+                  DO N=1,SF%N_LAYERS
                      X2 = X1 - SF%LAYER_THICKNESS(N)*SCALE_FACTOR
                      LP%MASS = LP%MASS + SF%LAYER_DENSITY(N)*FOTHPI*(X1**3-X2**3)
                      X1 = X2
@@ -1226,12 +1454,24 @@ ELSEIF (LPC%LIQUID_DROPLET) THEN
 
 ENDIF
 
-IF (SF%THERMALLY_THICK .AND. SF%TMP_INNER(1)>0._EB) THEN
-   DO I=0,SF%N_CELLS_INI+1
-      ONE_D%TMP(I) = SF%TMP_INNER(SF%LAYER_INDEX(I))
+! Set the initial inner temperature for all particles
+
+IF (LPC%TMP_INITIAL>0._EB) THEN
+   ONE_D%TMP(0:SF%N_CELLS_INI+1) = LPC%TMP_INITIAL
+ELSEIF (SF%RAMP_T_I_INDEX > 0) THEN
+   DO N=0,SF%N_CELLS_INI
+      X_POS = MAX(0._EB,MIN(RAMPS(SF%RAMP_T_I_INDEX)%SPAN,SF%X_S(N)-RAMPS(SF%RAMP_T_I_INDEX)%T_MIN))
+      ONE_D%TMP(N)=RAMPS(SF%RAMP_T_I_INDEX)%INTERPOLATED_DATA(NINT(X_POS*RAMPS(SF%RAMP_T_I_INDEX)%RDT)) + TMPM
    ENDDO
+   ONE_D%TMP(SF%N_CELLS_INI+1) = ONE_D%TMP(SF%N_CELLS_INI)
+ELSEIF (SF%THERMAL_BC_INDEX==THERMALLY_THICK .AND. SF%TMP_INNER(1)>0._EB) THEN
+   DO I=0,SF%N_CELLS_INI+1
+      IF (SF%TMP_INNER(SF%LAYER_INDEX(I))>0._EB) ONE_D%TMP(I) = SF%TMP_INNER(SF%LAYER_INDEX(I))
+   ENDDO
+ELSE
+   ONE_D%TMP(0:SF%N_CELLS_INI+1) = TMPA
 ENDIF
-IF (LPC%TMP_INITIAL>0._EB) ONE_D%TMP(0:SF%N_CELLS_INI+1) = LPC%TMP_INITIAL
+
 ONE_D%TMP_F = ONE_D%TMP(1)
 
 ! Check if fire spreads radially over this surface type, and if so, set T_IGN appropriately
@@ -1245,6 +1485,8 @@ ENDIF
 END SUBROUTINE INITIALIZE_SINGLE_PARTICLE
 
 
+!> \brief Determine a particles's size and weight
+
 SUBROUTINE PARTICLE_SIZE_WEIGHT(R,PWT)
 REAL(EB), INTENT(OUT):: R,PWT
 
@@ -1254,8 +1496,8 @@ IF (LPC%MONODISPERSE) THEN
 ELSE
    CALL RANDOM_NUMBER(RN)
    STRATUM = NINT(REAL(LPC%N_STRATA,EB)*REAL(RN,EB)+0.5_EB)
-   IL = LPC%IL_CNF(STRATUM)
-   IU = LPC%IU_CNF(STRATUM)
+   IL = LPC%STRATUM_INDEX_LOWER(STRATUM)
+   IU = LPC%STRATUM_INDEX_UPPER(STRATUM)
    CALL RANDOM_CHOICE(LPC%CNF(IL:IU),LPC%R_CNF(IL:IU),IU-IL,R)
    PWT = LPC%W_CNF(STRATUM)
    IF (2._EB*R > LPC%MAXIMUM_DIAMETER) THEN
@@ -1274,21 +1516,15 @@ END SUBROUTINE PARTICLE_SIZE_WEIGHT
 END SUBROUTINE INSERT_ALL_PARTICLES
 
 
+!> \brief Control routine for particle movement and energy transfer
 
 SUBROUTINE UPDATE_PARTICLES(T,DT,NM)
 
 REAL(EB), INTENT(IN) :: T,DT
 INTEGER, INTENT(IN) :: NM
-INTEGER :: NOM
 REAL(EB) :: TNOW
 
 IF (EVACUATION_ONLY(NM)) RETURN
-
-! Zero out the number of the PARTICLEs in the "orphanage"; that is, the place to hold PARTICLEs transferring from mesh to mesh
-
-DO NOM=1,NMESHES
-   IF (ALLOCATED(MESHES(NM)%OMESH(NOM)%N_PART_ORPHANS)) MESHES(NM)%OMESH(NOM)%N_PART_ORPHANS = 0
-ENDDO
 
 ! Return if there are no particles in this mesh
 
@@ -1311,12 +1547,12 @@ T_USED(8)=T_USED(8)+CURRENT_TIME()-TNOW
 END SUBROUTINE UPDATE_PARTICLES
 
 
+!> \brief Update particle position over one gas phase time step
+
 SUBROUTINE MOVE_PARTICLES(T,DT,NM)
 
-! Momentum transfer from all particles and PARTICLEs
-
 USE TRAN, ONLY: GET_IJK
-USE COMPLEX_GEOMETRY, ONLY: IBM_CGSC,IBM_CUTCFE,IBM_IDCF,IBM_GASPHASE,IBM_SOLID
+USE COMPLEX_GEOMETRY, ONLY: IBM_CGSC,IBM_CUTCFE,IBM_IDCF,IBM_GASPHASE,IBM_SOLID,POINT_IN_CFACE
 USE MATH_FUNCTIONS, ONLY: CROSS_PRODUCT
 INTEGER :: IFACE,ICF,INDCF,ICF_MIN
 REAL(EB) :: DIST2,DIST2_MIN,VEL_VECTOR_1(3),VEL_VECTOR_2(3),P_VECTOR(3)
@@ -1324,17 +1560,19 @@ REAL(EB), INTENT(IN) :: T,DT
 INTEGER, INTENT(IN) :: NM
 REAL     :: RN
 REAL(EB) :: XI,YJ,ZK,R_D,R_D_0,X_OLD,Y_OLD,Z_OLD,X_TRY,Y_TRY,Z_TRY,THETA,THETA_RN,STEP_FRACTION(-3:3),DT_CFL,DT_P,&
-            STEP_FRACTION_PREVIOUS,DELTA
-LOGICAL :: HIT_SOLID,CC_IBM_GASPHASE
+            STEP_FRACTION_PREVIOUS,DELTA,PVEC_L
+LOGICAL :: HIT_SOLID,CC_IBM_GASPHASE,EXTRACT_PARTICLE,FOUND_CF
 INTEGER :: IP,IC_NEW,IIG_OLD,JJG_OLD,KKG_OLD,IIG_TRY,JJG_TRY,KKG_TRY,IW,IC_OLD,IOR_HIT,&
-           N_ITER,ITER,I_COORD,IC_TRY
+           N_ITER,ITER,I_COORD,IC_TRY,IOR_ORIGINAL
 TYPE (LAGRANGIAN_PARTICLE_TYPE), POINTER :: LP=>NULL()
 TYPE (LAGRANGIAN_PARTICLE_CLASS_TYPE), POINTER :: LPC=>NULL()
 TYPE (SURFACE_TYPE), POINTER :: SF
 TYPE(ONE_D_M_AND_E_XFER_TYPE), POINTER :: ONE_D
 REAL(EB), POINTER, DIMENSION(:,:,:) :: NDPC=>NULL()
 REAL(EB), PARAMETER :: ONTHHALF=0.5_EB**ONTH, B_1=1.7321_EB
-REAL(EB), PARAMETER :: SURFACE_PARTICLE_DIAMETER=0.001_EB ! All PARTICLEs adjusted to this size when on solid (m)
+LOGICAL :: TEST_POS, BOUNCE_CF, IN_CFACE, SLIDE_CF
+INTEGER :: DIND, MADD(3,3)
+INTEGER, PARAMETER :: EYE3(1:3,1:3)=RESHAPE( (/1,0,0, 0,1,0, 0,0,1 /), (/3,3/) )
 
 CALL POINT_TO_MESH(NM)
 
@@ -1346,8 +1584,7 @@ NDPC=0._EB
 DO IP=1,NLP
    LP => LAGRANGIAN_PARTICLE(IP)
    CALL GET_IJK(LP%X,LP%Y,LP%Z,NM,XI,YJ,ZK,LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG)
-   IF (LP%PWT>0._EB .AND. LP%ONE_D%IOR==0) NDPC(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG) = &
-                                           NDPC(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG)+LP%PWT
+   NDPC(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG) = NDPC(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG) + LP%PWT
 ENDDO
 
 ! Zero out max particle velocity if CFL number is to be bound by particle speed.
@@ -1369,7 +1606,7 @@ PARTICLE_LOOP: DO IP=1,NLP
    DT_CFL = MIN(DX(LP%ONE_D%IIG)/(ABS(LP%U)+TWO_EPSILON_EB),&
                 DY(LP%ONE_D%JJG)/(ABS(LP%V)+TWO_EPSILON_EB),&
                 DZ(LP%ONE_D%KKG)/(ABS(LP%W)+TWO_EPSILON_EB))
-   N_ITER = CEILING(DT/DT_CFL)
+   N_ITER = CEILING(DT/(0.90_EB*DT_CFL))
    DT_P   = DT/REAL(N_ITER,EB)
 
    ! Zero out acceleration terms that go into momentum equation.
@@ -1377,6 +1614,10 @@ PARTICLE_LOOP: DO IP=1,NLP
    LP%ACCEL_X = 0._EB
    LP%ACCEL_Y = 0._EB
    LP%ACCEL_Z = 0._EB
+
+   ! Save value of IOR to determine if the particle hit any surface during the time step
+
+   IOR_ORIGINAL = LP%ONE_D%IOR
 
    ! Sub-timesteps
 
@@ -1391,12 +1632,12 @@ PARTICLE_LOOP: DO IP=1,NLP
       ELSEIF (LPC%MASSLESS_TRACER) THEN
          R_D = 0._EB
       ELSEIF (LPC%MASSLESS_TARGET) THEN
-         CYCLE PARTICLE_LOOP
+         EXIT TIME_STEP_LOOP
       ENDIF
 
       ! Throw out particles that have run out of mass.
 
-      IF (.NOT.LPC%MASSLESS_TRACER .AND. R_D<LPC%KILL_RADIUS) CYCLE PARTICLE_LOOP
+      IF (.NOT.LPC%MASSLESS_TRACER .AND. R_D<LPC%KILL_RADIUS) EXIT TIME_STEP_LOOP
 
       ! Save original particle radius.
 
@@ -1416,12 +1657,12 @@ PARTICLE_LOOP: DO IP=1,NLP
 
       IF ((SOLID(IC_OLD) .OR. EXTERIOR(IC_OLD)) .AND. .NOT. LP%PATH_PARTICLE ) THEN
          LP%X = 1.E6_EB
-         CYCLE PARTICLE_LOOP
+         EXIT TIME_STEP_LOOP
       ENDIF
 
       ! Move the particle one sub-time-step, (X_OLD,Y_OLD,Z_OLD) --> (LP%X,LP%Y,LP%Z)
 
-      SOLID_GAS_MOVE: IF (LP%ONE_D%IOR/=0) THEN
+      SOLID_GAS_MOVE: IF (LP%ONE_D%IOR/=0 .AND. LPC%ADHERE_TO_SOLID) THEN
 
          CALL MOVE_ON_SOLID
 
@@ -1431,22 +1672,9 @@ PARTICLE_LOOP: DO IP=1,NLP
 
          ! If the particle is massless or does not move, go on to the next particle
 
-         IF (LPC%MASSLESS_TRACER .OR. LP%PWT<=TWO_EPSILON_EB .OR. (LPC%STATIC .AND. .NOT.LP%EMBER)) CYCLE PARTICLE_LOOP
+         IF (LPC%MASSLESS_TRACER .OR. LP%PWT<=TWO_EPSILON_EB .OR. (LPC%STATIC .AND. .NOT.LP%EMBER)) EXIT TIME_STEP_LOOP
 
       ENDIF SOLID_GAS_MOVE
-
-      ! Special case where a liquid droplet hits a POROUS_FLOOR
-
-      IF (POROUS_FLOOR .AND. LP%Z<ZS .AND. LPC%LIQUID_DROPLET) THEN
-         IC_OLD = CELL_INDEX(IIG_OLD,JJG_OLD,1)
-         IW = WALL_INDEX(IC_OLD,-3)
-         IF (WALL(IW)%BOUNDARY_TYPE==SOLID_BOUNDARY .AND. ACCUMULATE_WATER .AND. .NOT.LP%SPLAT) THEN
-            WALL(IW)%ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) = WALL(IW)%ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) + &
-                                                        LP%PWT*LPC%FTPR*R_D**3/WALL(IW)%ONE_D%AREA
-            LP%SPLAT = .TRUE.
-         ENDIF
-         CYCLE PARTICLE_LOOP
-      ENDIF
 
       ! Determine the cell indices of the new particle location.
 
@@ -1463,14 +1691,60 @@ PARTICLE_LOOP: DO IP=1,NLP
 
       IF ((IC_OLD==0 .OR. IC_NEW==0) .AND. CC_IBM_GASPHASE) THEN
          LP%ONE_D%IOR = 0
+         LP%CFACE_INDEX = 0
          CYCLE TIME_STEP_LOOP
       ENDIF
+
+      ! The next big loops are to determine if the particle or droplet has hit a solid surface.
+      ! HIT_SOLID indicates that it has.
+
+      HIT_SOLID = .FALSE.
 
       ! Determine if the particle is near a CFACE, and if so, change its trajectory
 
       CFACE_SEARCH: IF (CC_IBM) THEN
-         IF (CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_CGSC)==IBM_CUTCFE) THEN  ! Current grid cell has CFACEs
-            INDCF = CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_IDCF)
+
+         INDCF = CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_IDCF)
+         BOUNCE_CF = .TRUE.
+
+         IF ( INDCF < 1 ) THEN
+            IF (CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_CGSC)==IBM_SOLID) THEN
+               ! Kinematics of a surface particle moving on Horizontal GEOM surface and passing to IBM_SOLID cell.
+               ! Bounce back on random direction, maintaining CFACE_INDEX:
+
+               IF (LP%CFACE_INDEX /= 0 .AND. ABS(LP%W)<TWO_EPSILON_EB) THEN
+                  CALL RANDOM_NUMBER(RN)
+                  DIST2_MIN = (1._EB-SIGN(1._EB,LP%V))*PI/2._EB
+                  IF(ABS(LP%U) > TWO_EPSILON_EB) DIST2_MIN = ATAN2(LP%V,LP%U)
+                  THETA_RN = PI*(REAL(RN,EB)+0.5_EB)+DIST2_MIN
+                  VEL_VECTOR_1(1) = COS(THETA_RN)
+                  VEL_VECTOR_1(2) = SIN(THETA_RN)
+                  VEL_VECTOR_1(3) = 0._EB
+                  LP%X=X_OLD; LP%Y=Y_OLD; LP%Z=Z_OLD
+                  LP%U = VEL_VECTOR_1(1)*LPC%HORIZONTAL_VELOCITY
+                  LP%V = VEL_VECTOR_1(2)*LPC%HORIZONTAL_VELOCITY
+                  LP%W = VEL_VECTOR_1(3)*LPC%VERTICAL_VELOCITY
+                  BOUNCE_CF = .FALSE.
+               ELSE
+                  ! Search for cut-cell in the direction of -GVEC:
+                  DIND = MAXLOC(ABS(GVEC(1:3)),DIM=1); MADD(1:3,1:3) = -INT(SIGN(1._EB,GVEC(DIND)))*EYE3
+                  INDCF = CCVAR(LP%ONE_D%IIG+MADD(1,DIND),LP%ONE_D%JJG+MADD(2,DIND),LP%ONE_D%KKG+MADD(3,DIND),IBM_IDCF)
+               ENDIF
+            ENDIF
+         ENDIF
+
+         ! Check if there are CFACEs in this cell:
+         IF (INDCF > 0) THEN
+            FOUND_CF=.FALSE.
+            DO IFACE=1,CUT_FACE(INDCF)%NFACE
+               ICF = CUT_FACE(INDCF)%CFACE_INDEX(IFACE)
+               IF (ICF > 0) THEN; FOUND_CF=.TRUE.; EXIT; ENDIF
+            ENDDO
+            IF(.NOT.FOUND_CF) INDCF = 0
+         ENDIF
+
+         INDCF_POS : IF ( INDCF > 0 ) THEN  ! Current grid cell has CFACEs
+
             DIST2_MIN = 1.E6_EB
             DO IFACE=1,CUT_FACE(INDCF)%NFACE  ! Loop through CFACEs and find the one closest to the particle
                ICF = CUT_FACE(INDCF)%CFACE_INDEX(IFACE)
@@ -1481,53 +1755,158 @@ PARTICLE_LOOP: DO IP=1,NLP
                ENDIF
             ENDDO
             ICF = ICF_MIN
-            ! If the CFACE normal points up, force the particle to follow the contour. If the normal points down,
-            ! put the particle back into the gas phase.
-            IF (DOT_PRODUCT(CFACE(ICF)%NVEC,GVEC)>0._EB) THEN  ! normal points down
-               LP%CFACE_INDEX = 0
-               LP%ONE_D%IOR = 0
-            ELSE  ! normal points up
-               LP%CFACE_INDEX = ICF
-               LP%ONE_D%IOR = 1
-               CALL CROSS_PRODUCT(VEL_VECTOR_1,CFACE(ICF)%NVEC,GVEC)
-               CALL CROSS_PRODUCT(VEL_VECTOR_2,VEL_VECTOR_1,CFACE(ICF)%NVEC)
-               VEL_VECTOR_1 = VEL_VECTOR_2/NORM2(VEL_VECTOR_2)
-               LP%U = VEL_VECTOR_1(1)*LPC%HORIZONTAL_VELOCITY
-               LP%V = VEL_VECTOR_1(2)*LPC%HORIZONTAL_VELOCITY
-               LP%W = VEL_VECTOR_1(3)*LPC%HORIZONTAL_VELOCITY
-               ! If the particle is inside the solid, move it to the surface in the normal direction.
-               P_VECTOR = (/LP%X-CFACE(ICF)%X,LP%Y-CFACE(ICF)%Y,LP%Z-CFACE(ICF)%Z/)
-               IF (NORM2(P_VECTOR)>TWO_EPSILON_EB) THEN
-                  THETA = ACOS(DOT_PRODUCT(CFACE(ICF)%NVEC,P_VECTOR/NORM2(P_VECTOR)))
-                  IF (THETA>PIO2) THEN
-                     DELTA = SIN(THETA-0.5_EB*PI)
-                     LP%X = LP%X + DELTA*CFACE(ICF)%NVEC(1)
-                     LP%Y = LP%Y + DELTA*CFACE(ICF)%NVEC(2)
-                     LP%Z = LP%Z + DELTA*CFACE(ICF)%NVEC(3)
+
+            ! Now test case of ICF same as previous CFACE_INDEX and it's normal opposite to GVEC:
+            SLIDE_CF  = .FALSE.
+            IF(LP%CFACE_INDEX>0)THEN
+
+               DIST2 = DOT_PRODUCT(CFACE(LP%CFACE_INDEX)%NVEC,GVEC/(NORM2(GVEC)+TWO_EPSILON_EB))
+               IF(DIST2<-0.99_EB) THEN ! Only for slopes less than 8 degrees.
+
+                  IN_CFACE=.TRUE.
+                  ! Test for case of CFACE_INDEX switching to an ICF with similar slope, if so don't do anything.
+                  IF (.NOT.(LP%CFACE_INDEX/=ICF .AND. (DOT_PRODUCT(CFACE(LP%CFACE_INDEX)%NVEC,CFACE(ICF)%NVEC))>0.99_EB) ) THEN
+
+                     IF (LP%CFACE_INDEX/=ICF .AND. (DOT_PRODUCT(CFACE(LP%CFACE_INDEX)%NVEC,CFACE(ICF)%NVEC))<=0.99_EB) THEN
+                        ! Case of switching to different ICF with different slope:
+                        DIST2 = DOT_PRODUCT(CFACE(ICF)%NVEC,GVEC/(NORM2(GVEC)+TWO_EPSILON_EB))
+                        ! If ICF is almost vertical pointing in the direction of velocity, set creep velocity.
+                        IF(ABS(DIST2)<0.01_EB .AND. (CFACE(ICF)%Z<CFACE(LP%CFACE_INDEX)%Z)) IN_CFACE=.FALSE.
+                     ELSE
+                        ! Here we test if LP lays outside of CFACE ICF polygon, being ICF a 'top' CFACE.
+                        ! If so, attach to the most vertical CFACE in surrounding cells (drop in the sides).
+                        CALL POINT_IN_CFACE(NM,LP%X,LP%Y,LP%Z,LP%CFACE_INDEX,IN_CFACE)
+                        IF(.NOT.IN_CFACE)THEN
+                           ! Select another CFACE in the cell:
+                           DIST2_MIN = 1.E6_EB; ICF_MIN=0
+                           DO IFACE=1,CUT_FACE(INDCF)%NFACE  ! Loop through CFACEs and find the one closest to the particle
+                              ! Cycle if ICF=CFACE_INDEX.
+                              ICF = CUT_FACE(INDCF)%CFACE_INDEX(IFACE); IF(LP%CFACE_INDEX==ICF) CYCLE
+                              DIST2 = (LP%X-CFACE(ICF)%X)**2 + (LP%Y-CFACE(ICF)%Y)**2 + (LP%Z-CFACE(ICF)%Z)**2
+                              IF (DIST2<DIST2_MIN) THEN
+                                 DIST2_MIN = DIST2
+                                 ICF_MIN = ICF
+                              ENDIF
+                           ENDDO
+                           IF (ICF_MIN/=0) THEN ! We found a CFACE either plane or side below CFACE_INDEX.
+                              ICF = ICF_MIN
+                              ! Do not fix velocity if found CFACE is not at lower height than CFACE_INDEX one.
+                              IF((CFACE(ICF)%Z>(CFACE(LP%CFACE_INDEX)%Z-TWO_EPSILON_EB))) IN_CFACE = .TRUE.
+                           ELSE ! CFACE not found, continue with CFACE_INDEX face.
+                              ICF = LP%CFACE_INDEX
+                              IN_CFACE = .TRUE.
+                           ENDIF
+                        ENDIF
+                     ENDIF
+
+                     IF(.NOT.IN_CFACE)THEN
+                       LP%U = 0._EB
+                       LP%V = 0._EB
+                       LP%W = SIGN(1._EB,GVEC(3))*LPC%VERTICAL_VELOCITY
+                       LP%CFACE_INDEX = ICF
+                       LP%ONE_D%IOR = 1
+                       HIT_SOLID = .TRUE.
+                       SLIDE_CF  = .TRUE.
+                     ENDIF
                   ENDIF
                ENDIF
+
             ENDIF
-            CYCLE PARTICLE_LOOP
-         ELSEIF (CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_CGSC)==IBM_SOLID) THEN  ! Move particle out of solid
-            LP%X = X_OLD
-            LP%Y = Y_OLD
-            LP%Z = Z_OLD
-            LP%U = 0._EB
-            LP%V = 0._EB
-            LP%W = 0._EB
-         ELSE
+
+            SLIDE_CF_IF : IF (.NOT.SLIDE_CF) THEN ! Avoid this block in case droplet falls on an obstacle side (filled before).
+
+               ! If the CFACE normal points up, force the particle to follow the contour. If the normal points down,
+               ! put the particle back into the gas phase.
+
+               P_VECTOR = (/LP%X-CFACE(ICF)%X,LP%Y-CFACE(ICF)%Y,LP%Z-CFACE(ICF)%Z/)
+               TEST_POS = .FALSE.; IF(LP%CFACE_INDEX == 0) TEST_POS = DOT_PRODUCT(CFACE(ICF)%NVEC,P_VECTOR) > TWO_EPSILON_EB
+
+               CFACE_ATTACH : IF (DOT_PRODUCT(CFACE(ICF)%NVEC,GVEC)>0._EB .OR. TEST_POS) THEN
+
+                  ! Normal points down or particle in gas phase. Let particle move freely:
+
+                  LP%CFACE_INDEX = 0
+                  LP%ONE_D%IOR = 0
+
+               ELSE  CFACE_ATTACH ! normal points up; determine direction for particle to move
+
+                  CALL CROSS_PRODUCT(VEL_VECTOR_1,CFACE(ICF)%NVEC,GVEC)
+                  CALL CROSS_PRODUCT(VEL_VECTOR_2,VEL_VECTOR_1,CFACE(ICF)%NVEC)
+                  CFACE_SLOPE : IF (NORM2(VEL_VECTOR_2) > TWO_EPSILON_EB .AND. ABS(LP%W) > TWO_EPSILON_EB) THEN
+                     ! The surface is tilted; particles go down slope:
+                     VEL_VECTOR_1 = VEL_VECTOR_2/NORM2(VEL_VECTOR_2)
+                     LP%U = VEL_VECTOR_1(1)*LPC%HORIZONTAL_VELOCITY
+                     LP%V = VEL_VECTOR_1(2)*LPC%HORIZONTAL_VELOCITY
+                     LP%W = VEL_VECTOR_1(3)*LPC%VERTICAL_VELOCITY
+                  ELSEIF (LP%ONE_D%IOR==0) THEN  CFACE_SLOPE ! surface is flat and particle has no direction, coming from gasphase,
+                                                             ! particle is given random direction
+                     CALL RANDOM_NUMBER(RN)
+                     THETA_RN = TWOPI*REAL(RN,EB)
+                     VEL_VECTOR_1(IAXIS) = COS(THETA_RN)
+                     VEL_VECTOR_1(JAXIS) = SIN(THETA_RN)
+                     VEL_VECTOR_1(KAXIS) = 0._EB
+                     LP%U = VEL_VECTOR_1(IAXIS)*LPC%HORIZONTAL_VELOCITY
+                     LP%V = VEL_VECTOR_1(JAXIS)*LPC%HORIZONTAL_VELOCITY
+                     LP%W = VEL_VECTOR_1(KAXIS)*LPC%VERTICAL_VELOCITY
+                  ELSEIF (LP%CFACE_INDEX /= 0 .AND. ABS(LP%W)<TWO_EPSILON_EB) THEN CFACE_SLOPE
+                     ! Particle moving in horizontal direction and assumed crossing into solid.
+                     ! Bounce back on random direction, maintaining CFACE_INDEX:
+                     IF (DOT_PRODUCT( (/ LP%U, LP%V /) ,CFACE(ICF)%NVEC(IAXIS:JAXIS))<-TWO_EPSILON_EB)THEN
+                        CALL RANDOM_NUMBER(RN)
+                        DIST2_MIN = (1._EB-SIGN(1._EB,LP%V))*PI/2._EB
+                        IF(ABS(LP%U) > TWO_EPSILON_EB) DIST2_MIN = ATAN2(LP%V,LP%U)
+                        THETA_RN = PI*(REAL(RN,EB)+0.5_EB)+DIST2_MIN
+                        VEL_VECTOR_1(1) = COS(THETA_RN)
+                        VEL_VECTOR_1(2) = SIN(THETA_RN)
+                        VEL_VECTOR_1(3) = 0._EB
+                        LP%X=X_OLD; LP%Y=Y_OLD; LP%Z=Z_OLD
+                        LP%U = VEL_VECTOR_1(1)*LPC%HORIZONTAL_VELOCITY
+                        LP%V = VEL_VECTOR_1(2)*LPC%HORIZONTAL_VELOCITY
+                        LP%W = VEL_VECTOR_1(3)*LPC%VERTICAL_VELOCITY
+                        EXIT TIME_STEP_LOOP
+                     ENDIF
+                  ENDIF CFACE_SLOPE
+
+                  ! If the particle is inside the solid, move it to the surface in the normal direction.
+
+                  PVEC_L = NORM2(P_VECTOR)
+                  IF (PVEC_L>TWO_EPSILON_EB) THEN
+                     THETA = ACOS(DOT_PRODUCT(CFACE(ICF)%NVEC,P_VECTOR/PVEC_L))
+                     IF (THETA>PIO2) THEN
+                        DELTA = PVEC_L*SIN(THETA-0.5_EB*PI)+TWO_EPSILON_EB
+                        LP%X = LP%X + DELTA*CFACE(ICF)%NVEC(1)
+                        LP%Y = LP%Y + DELTA*CFACE(ICF)%NVEC(2)
+                        LP%Z = LP%Z + DELTA*CFACE(ICF)%NVEC(3)
+                     ENDIF
+                  ENDIF
+                  LP%CFACE_INDEX = ICF
+                  LP%ONE_D%IOR = 1
+                  HIT_SOLID = .TRUE.
+
+                  CALL VENT_PARTICLE_EXTRACTION(HIT_SOLID,EXTRACT_PARTICLE,CFACE_INDEX=ICF)
+                  IF (EXTRACT_PARTICLE) EXIT TIME_STEP_LOOP
+
+               ENDIF CFACE_ATTACH
+
+            ENDIF SLIDE_CF_IF
+
+         ELSEIF (CCVAR(LP%ONE_D%IIG,LP%ONE_D%JJG,LP%ONE_D%KKG,IBM_CGSC)/=IBM_GASPHASE .AND. BOUNCE_CF) THEN INDCF_POS
+
             LP%ONE_D%IOR = 0
-         ENDIF
+            LP%CFACE_INDEX = 0
+
+         ENDIF INDCF_POS
+
       ENDIF CFACE_SEARCH
 
       ! If the particle crosses a cell boundary, determine its new status and check if it has hit a solid.
 
-      CROSS_CELL_BOUNDARY: IF (IIG_OLD/=LP%ONE_D%IIG .OR. JJG_OLD/=LP%ONE_D%JJG .OR. KKG_OLD/=LP%ONE_D%KKG) THEN
+      WALL_SEARCH: IF (.NOT.HIT_SOLID .AND. LP%CFACE_INDEX==0 .AND. &
+                       (IIG_OLD/=LP%ONE_D%IIG .OR. JJG_OLD/=LP%ONE_D%JJG .OR. KKG_OLD/=LP%ONE_D%KKG)) THEN
 
          ! Calculate the STEP_FRACTION, which indicates the relative distance between the particles's old and new
          ! position where the particle hits a cell boundary.
 
-         HIT_SOLID = .FALSE.
          STEP_FRACTION = 1.1_EB
 
          IF (LP%ONE_D%IIG>IIG_OLD) STEP_FRACTION(-1) = (X(IIG_OLD)  -X_OLD)/(LP%X-X_OLD)
@@ -1546,9 +1925,11 @@ PARTICLE_LOOP: DO IP=1,NLP
          IIG_TRY = IIG_OLD
          JJG_TRY = JJG_OLD
          KKG_TRY = KKG_OLD
-         DO I_COORD=1,3
+         IW = 0
+
+         TRIAL_LOOP: DO I_COORD=1,3
             IOR_HIT = MINLOC(STEP_FRACTION,DIM=1,MASK=STEP_FRACTION>STEP_FRACTION_PREVIOUS) - 4
-            IF (STEP_FRACTION(IOR_HIT)>1._EB) EXIT
+            IF (STEP_FRACTION(IOR_HIT)>1._EB) EXIT TRIAL_LOOP
             X_TRY = X_OLD + STEP_FRACTION(IOR_HIT)*(LP%X-X_OLD)
             Y_TRY = Y_OLD + STEP_FRACTION(IOR_HIT)*(LP%Y-Y_OLD)
             Z_TRY = Z_OLD + STEP_FRACTION(IOR_HIT)*(LP%Z-Z_OLD)
@@ -1556,6 +1937,10 @@ PARTICLE_LOOP: DO IP=1,NLP
             IW = WALL_INDEX(IC_TRY,-IOR_HIT)
             IF (WALL(IW)%BOUNDARY_TYPE==SOLID_BOUNDARY) THEN
                LP%WALL_INDEX = IW
+               HIT_SOLID = .TRUE.
+               CALL VENT_PARTICLE_EXTRACTION(HIT_SOLID,EXTRACT_PARTICLE,WALL_INDEX=IW)
+               IF (.NOT. HIT_SOLID) EXIT TRIAL_LOOP
+               IF (EXTRACT_PARTICLE) EXIT TIME_STEP_LOOP
                LP%ONE_D%IOR  = IOR_HIT
                LP%X = X_TRY
                LP%Y = Y_TRY
@@ -1572,8 +1957,7 @@ PARTICLE_LOOP: DO IP=1,NLP
                LP%ONE_D%JJG = JJG_TRY
                LP%ONE_D%KKG = KKG_TRY
                IC_NEW = IC_TRY
-               HIT_SOLID = .TRUE.
-               EXIT
+               EXIT TRIAL_LOOP
             ENDIF
             STEP_FRACTION_PREVIOUS = STEP_FRACTION(IOR_HIT)
             SELECT CASE(IOR_HIT)
@@ -1584,53 +1968,21 @@ PARTICLE_LOOP: DO IP=1,NLP
                CASE( 2) ; JJG_TRY = JJG_TRY-1
                CASE( 3) ; KKG_TRY = KKG_TRY-1
             END SELECT
-         ENDDO
+         ENDDO TRIAL_LOOP
 
-         ! Process the particle if it has hit a solid wall.
+         ! If the particle has hit a Cartesian solid, choose a new direction
 
-         IF_HIT_SOLID: IF (HIT_SOLID) THEN
-
-            ! Remove the particle if it is not allowed on a surface
-
-            IF (.NOT.ALLOW_SURFACE_PARTICLES) THEN
-               LP%ONE_D%X(1) = 0.9_EB*LPC%KILL_RADIUS
-               CYCLE PARTICLE_LOOP
-            ENDIF
-
-            ! Add PARTICLE mass to accumulated liquid array if it has not already been counted (LP%SPLAT=F)
-
-            IF (ACCUMULATE_WATER .AND. .NOT.LP%SPLAT .AND. LPC%LIQUID_DROPLET) THEN
-               IF (LP%WALL_INDEX>0) THEN
-                  ONE_D => WALL(LP%WALL_INDEX)%ONE_D
-               ELSEIF (LP%CFACE_INDEX>0) THEN
-                  ONE_D => CFACE(LP%CFACE_INDEX)%ONE_D
-               ENDIF
-               IF (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0) THEN
-                  ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) = ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) + LP%PWT*LPC%FTPR*R_D**3/ONE_D%AREA
-                  LP%SPLAT = .TRUE.
-               ENDIF
-            ENDIF
-
-            ! Adjust the size of the PARTICLE and weighting factor
-
-            IF (LPC%LIQUID_DROPLET) THEN
-               R_D = MIN(0.5_EB*SURFACE_PARTICLE_DIAMETER,LP%PWT**ONTH*R_D)
-               LP%PWT = LP%PWT*(R_D_0/R_D)**3
-               LP%ONE_D%X(1) = R_D
-               LP%ONE_D%LAYER_THICKNESS(1) = R_D
-               LP%MASS = FOTHPI*LP%ONE_D%MATL_COMP(1)%RHO(1)*R_D**3
-            ENDIF
-
-            ! Choose a direction for the PARTICLEs to move
+         IF_HIT_SOLID: IF (HIT_SOLID .AND. IW>0) THEN
 
             DIRECTION: SELECT CASE(LP%ONE_D%IOR)
                CASE (-2:-1,1:2) DIRECTION
                   LP%U = 0._EB
                   LP%V = 0._EB
-                  LP%W = -LPC%VERTICAL_VELOCITY
-                  LP%SPLAT = .FALSE.
+                  IF (LPC%ADHERE_TO_SOLID) LP%W = -LPC%VERTICAL_VELOCITY
                CASE (-3) DIRECTION
-                  IF (.NOT.ALLOW_UNDERSIDE_PARTICLES) THEN
+                  IF (LPC%SOLID_PARTICLE) THEN
+                     LP%ONE_D%IOR = 0
+                  ELSEIF (.NOT.ALLOW_UNDERSIDE_PARTICLES) THEN
                      LP%U = 0._EB
                      LP%V = 0._EB
                      LP%W = -LPC%VERTICAL_VELOCITY
@@ -1643,52 +1995,95 @@ PARTICLE_LOOP: DO IP=1,NLP
                      LP%W = 0._EB
                   ENDIF
                CASE (3) DIRECTION
-                  CALL RANDOM_NUMBER(RN)
-                  THETA_RN = TWOPI*REAL(RN,EB)
-                  LP%U = LPC%HORIZONTAL_VELOCITY*COS(THETA_RN)
-                  LP%V = LPC%HORIZONTAL_VELOCITY*SIN(THETA_RN)
+                  IF (LPC%ADHERE_TO_SOLID) THEN
+                     CALL RANDOM_NUMBER(RN)
+                     THETA_RN = TWOPI*REAL(RN,EB)
+                     LP%U = LPC%HORIZONTAL_VELOCITY*COS(THETA_RN)
+                     LP%V = LPC%HORIZONTAL_VELOCITY*SIN(THETA_RN)
+                  ELSE
+                     LP%U = 0._EB
+                     LP%V = 0._EB
+                  ENDIF
                   LP%W = 0._EB
             END SELECT DIRECTION
 
-            ! If the particle is solid, as opposed to a liquid droplet, do not make it stick to the wall.
-
-            IF (LPC%SOLID_PARTICLE) LP%ONE_D%IOR = 0
-
          ENDIF IF_HIT_SOLID
 
-      ENDIF CROSS_CELL_BOUNDARY
+      ENDIF WALL_SEARCH
+
+      ! If the particle has passed outside of its current mesh and it has not
+      ! hit anything, schedule it for removal or adoption by another mesh.
+
+      IF (EXTERIOR(IC_NEW) .AND. .NOT.HIT_SOLID) CYCLE PARTICLE_LOOP
+
+      ! Process the particle if it has hit either a WALL or CFACE
+
+      IF (HIT_SOLID) THEN
+
+         ! Remove the particle if it is not allowed on a surface
+
+         IF (.NOT.ALLOW_SURFACE_PARTICLES) THEN
+            LP%ONE_D%X(1) = 0.9_EB*LPC%KILL_RADIUS
+            EXIT TIME_STEP_LOOP
+         ENDIF
+
+         ! Adjust the size of the PARTICLE and weighting factor
+
+         IF (LPC%LIQUID_DROPLET) THEN
+            R_D = MIN(0.5_EB*LPC%SURFACE_DIAMETER,LP%PWT**ONTH*R_D)
+            LP%PWT = LP%PWT*(R_D_0/R_D)**3
+            LP%ONE_D%X(1) = R_D
+            LP%ONE_D%LAYER_THICKNESS(1) = R_D
+            LP%MASS = FOTHPI*LP%ONE_D%MATL_COMP(1)%RHO(1)*R_D**3
+         ENDIF
+
+      ENDIF
 
       ! If the droplet was attached to a solid WALL (LP%ONE_D%IOR/=0), but now it is not, change its course. If the droplet was
       ! dripping down a vertical surface (IOR=+-1,2), make it go under the solid and then move upward to (possibly) stick
       ! to the underside or drip off. If the droplet moves off an upward or downward facing horizontal surface (IOR=+-3), reverse
-      ! its course and drop it down the side of the solid obstruction. 
+      ! its course and drop it down the side of the solid obstruction.
 
-      LP%WALL_INDEX = WALL_INDEX(IC_NEW,-LP%ONE_D%IOR)
+      IF (LP%CFACE_INDEX==0 .AND. LP%ONE_D%IOR/=0) THEN
 
-      IF (WALL(LP%WALL_INDEX)%BOUNDARY_TYPE/=SOLID_BOUNDARY) THEN
-         SELECT CASE(LP%ONE_D%IOR)
-            CASE( 1)
-               LP%X = LP%X - 0.2_EB*DX(LP%ONE_D%IIG)
-               LP%W = -2._EB*LP%W
-            CASE(-1)
-               LP%X = LP%X + 0.2_EB*DX(LP%ONE_D%IIG)
-               LP%W = -2._EB*LP%W
-            CASE( 2)
-               LP%Y = LP%Y - 0.2_EB*DY(LP%ONE_D%JJG)
-               LP%W = -2._EB*LP%W
-            CASE(-2)
-               LP%Y = LP%Y + 0.2_EB*DY(LP%ONE_D%JJG)
-               LP%W = -2._EB*LP%W
-            CASE(-3,3)
-               LP%U = -LP%U
-               LP%V = -LP%V
-               LP%Z =  LP%Z - 0.2_EB*DZ(LP%ONE_D%KKG)
-         END SELECT
-         LP%ONE_D%IOR = 0
-         LP%WALL_INDEX = 0
+         LP%WALL_INDEX = WALL_INDEX(IC_NEW,-LP%ONE_D%IOR)
+
+         IF (WALL(LP%WALL_INDEX)%BOUNDARY_TYPE/=SOLID_BOUNDARY) THEN
+            IF (LPC%ADHERE_TO_SOLID) THEN
+               SELECT CASE(LP%ONE_D%IOR)
+                  CASE( 1)
+                     LP%X = LP%X - 0.2_EB*DX(LP%ONE_D%IIG)
+                     LP%W = SQRT(2._EB*GRAV*DZ(LP%ONE_D%KKG))
+                  CASE(-1)
+                     LP%X = LP%X + 0.2_EB*DX(LP%ONE_D%IIG)
+                     LP%W = SQRT(2._EB*GRAV*DZ(LP%ONE_D%KKG))
+                  CASE( 2)
+                     LP%Y = LP%Y - 0.2_EB*DY(LP%ONE_D%JJG)
+                     LP%W = SQRT(2._EB*GRAV*DZ(LP%ONE_D%KKG))
+                  CASE(-2)
+                     LP%Y = LP%Y + 0.2_EB*DY(LP%ONE_D%JJG)
+                     LP%W = SQRT(2._EB*GRAV*DZ(LP%ONE_D%KKG))
+                  CASE(-3,3)
+                     LP%U = -2._EB*LP%U
+                     LP%V = -2._EB*LP%V
+                     LP%Z =  LP%Z - 0.2_EB*DZ(LP%ONE_D%KKG)
+               END SELECT
+            ENDIF
+            LP%ONE_D%IOR = 0
+            LP%WALL_INDEX = 0
+         ENDIF
+
+      ELSEIF (LP%CFACE_INDEX==0) THEN
+
+         LP%WALL_INDEX = 0  ! The droplet is not stuck to a WALL cell
+
       ENDIF
 
    ENDDO TIME_STEP_LOOP
+
+   ! If the particle is not stuck to a wall, allow it to be counted again.
+
+   IF (LP%ONE_D%IOR==0 .AND. IOR_ORIGINAL==0) LP%SPLAT = .FALSE.
 
 ENDDO PARTICLE_LOOP
 
@@ -1699,9 +2094,9 @@ CALL REMOVE_PARTICLES(T,NM)
 CONTAINS
 
 
-SUBROUTINE MOVE_ON_SOLID
+!> \brief Move particles attached to solid surfaces
 
-! Move particles attached to solid surfaces
+SUBROUTINE MOVE_ON_SOLID
 
 LP%ACCEL_X = 0._EB
 LP%ACCEL_Y = 0._EB
@@ -1713,17 +2108,20 @@ LP%Z = Z_OLD + LP%W*DT_P
 END SUBROUTINE MOVE_ON_SOLID
 
 
+!> \brief Move particles in the gas phase
+
 SUBROUTINE MOVE_IN_GAS
 
-USE PHYSICAL_FUNCTIONS, ONLY : DRAG, GET_VISCOSITY
+USE PHYSICAL_FUNCTIONS, ONLY : DRAG, GET_VISCOSITY, LES_FILTER_WIDTH_FUNCTION
 USE MATH_FUNCTIONS, ONLY : AFILL2, EVALUATE_RAMP, RANDOM_CHOICE, BOX_MULLER
 REAL(EB) :: UBAR,VBAR,WBAR,RVC,UREL,VREL,WREL,QREL,RHO_G,TMP_G,MU_AIR, &
             U_OLD,V_OLD,W_OLD,ZZ_GET(1:N_TRACKED_SPECIES),WAKE_VEL,DROP_VOL_FRAC,RE_WAKE,&
-            WE_G,T_BU_BAG,T_BU_STRIP,MPOM,ALBO,SFAC,BREAKUP_RADIUS(0:NDC),&
-            DD,DD_X,DD_Y,DD_Z,DW_X,DW_Y,DW_Z,K_TERM(3),Y_TERM(3),C_DRAG,A_DRAG,HAB,PARACOR,QREL2,X_WGT,Y_WGT,Z_WGT,&
-            GX_LOC,GY_LOC,GZ_LOC,DUMMY,DRAG_MAX(3)=0._EB,SUM_RHO
-REAL(EB), SAVE :: FP_MASS,HALF_DT2,BETA,OBDT,ALPHA,OPA,DTOPA,BDTOA
+            WE_G,T_BU_BAG,T_BU_STRIP,MPOM,SFAC,BREAKUP_RADIUS(0:NDC),&
+            DD,DD_X,DD_Y,DD_Z,DW_X,DW_Y,DW_Z,K_TERM(3),Y_TERM(3),C_DRAG,A_DRAG,X_WGT,Y_WGT,Z_WGT,&
+            GX_LOC,GY_LOC,GZ_LOC,DUMMY,DRAG_MAX(3)=0._EB,SUM_RHO,K_SGS,U_P,L_WAKE,KAPPA_E,KN
+REAL(EB), SAVE :: BETA
 INTEGER :: IIX,JJY,KKZ,SURF_INDEX,N
+REAL(EB), PARAMETER :: MAX_TURBULENCE_INTENSITY = 0.1_EB
 
 ! Save current values of particle velocity components
 
@@ -1750,55 +2148,80 @@ UBAR = AFILL2(U,IIG_OLD-1,JJY,KKZ,(X_OLD-X(IIG_OLD-1))*RDX(IIG_OLD),Y_WGT,Z_WGT)
 VBAR = AFILL2(V,IIX,JJG_OLD-1,KKZ,X_WGT,(Y_OLD-Y(JJG_OLD-1))*RDY(JJG_OLD),Z_WGT)
 WBAR = AFILL2(W,IIX,JJY,KKG_OLD-1,X_WGT,Y_WGT,(Z_OLD-Z(KKG_OLD-1))*RDZ(KKG_OLD))
 
+! If the particle has a path, just follow the path and return
+
+IF (LP%PATH_PARTICLE) THEN
+   IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(1) > 0) &
+      LP%X = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(1))
+   IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(2) > 0) &
+      LP%Y = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(2))
+   IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(3) > 0) &
+      LP%Z = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(3))
+   RETURN
+ENDIF
+
 ! If the particle is massless, just move it and go on to the next particle
 
 TRACER_IF: IF (LPC%MASSLESS_TRACER .OR. LP%PWT<=TWO_EPSILON_EB) THEN
-   IF (LP%PATH_PARTICLE) THEN
-   ! If the particle has a path, just follow the path
-      IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(1) > 0) &
-         LP%X = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(1))
-      IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(2) > 0) &
-         LP%Y = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(2))
-      IF (INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(3) > 0) &
-         LP%Z = EVALUATE_RAMP(T,0._EB,INITIALIZATION(LP%INIT_INDEX)%PATH_RAMP_INDEX(3))
+   IF (LPC%TURBULENT_DISPERSION) THEN
+      DD_X = RSC * (MU(IIG_OLD+1,JJG_OLD,KKG_OLD) - MU(IIG_OLD-1,JJG_OLD,KKG_OLD)) * &
+             RDXN(IIG_OLD-1)*RDXN(IIG_OLD)/(RDXN(IIG_OLD-1) + RDXN(IIG_OLD))
+      DD_Y = RSC * (MU(IIG_OLD,JJG_OLD+1,KKG_OLD) - MU(IIG_OLD,JJG_OLD-1,KKG_OLD)) * &
+             RDYN(JJG_OLD-1)*RDYN(JJG_OLD)/(RDYN(JJG_OLD-1) + RDYN(JJG_OLD))
+      DD_Z = RSC * (MU(IIG_OLD,JJG_OLD,KKG_OLD+1) - MU(IIG_OLD,JJG_OLD,KKG_OLD-1)) * &
+             RDZN(KKG_OLD-1)*RDZN(KKG_OLD)/(RDZN(KKG_OLD-1) + RDZN(KKG_OLD))
+      LP%U = UBAR + DD_X/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
+      LP%V = VBAR + DD_Y/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
+      LP%W = WBAR + DD_Z/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
+      DD   = SQRT(2._EB*MU(IIG_OLD,JJG_OLD,KKG_OLD)/RHO(IIG_OLD,JJG_OLD,KKG_OLD)*RSC*DT_P)
+      ! generate pairs of standard Gaussian random variables
+      CALL BOX_MULLER(DW_X,DW_Y)
+      CALL BOX_MULLER(DW_Z,DW_X)
+      LP%X = X_OLD + LP%U*DT_P + DD*DW_X
+      LP%Y = Y_OLD + LP%V*DT_P + DD*DW_Y
+      LP%Z = Z_OLD + LP%W*DT_P + DD*DW_Z
    ELSE
-      IF (LPC%TURBULENT_DISPERSION) THEN
-         DD_X = RSC * (MU(IIG_OLD+1,JJG_OLD,KKG_OLD) - MU(IIG_OLD-1,JJG_OLD,KKG_OLD)) * &
-                RDXN(IIG_OLD-1)*RDXN(IIG_OLD)/(RDXN(IIG_OLD-1) + RDXN(IIG_OLD))
-         DD_Y = RSC * (MU(IIG_OLD,JJG_OLD+1,KKG_OLD) - MU(IIG_OLD,JJG_OLD-1,KKG_OLD)) * &
-                RDYN(JJG_OLD-1)*RDYN(JJG_OLD)/(RDYN(JJG_OLD-1) + RDYN(JJG_OLD))
-         DD_Z = RSC * (MU(IIG_OLD,JJG_OLD,KKG_OLD+1) - MU(IIG_OLD,JJG_OLD,KKG_OLD-1)) * &
-                RDZN(KKG_OLD-1)*RDZN(KKG_OLD)/(RDZN(KKG_OLD-1) + RDZN(KKG_OLD))
-         LP%U = UBAR + DD_X/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
-         LP%V = VBAR + DD_Y/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
-         LP%W = WBAR + DD_Z/RHO(IIG_OLD,JJG_OLD,KKG_OLD)
-         DD   = SQRT(2._EB*MU(IIG_OLD,JJG_OLD,KKG_OLD)/RHO(IIG_OLD,JJG_OLD,KKG_OLD)*RSC*DT_P)
-         ! generate pairs of standard Gaussian random variables
-         CALL BOX_MULLER(DW_X,DW_Y)
-         CALL BOX_MULLER(DW_Z,DW_X)
-         LP%X = X_OLD + LP%U*DT_P + DD*DW_X
-         LP%Y = Y_OLD + LP%V*DT_P + DD*DW_Y
-         LP%Z = Z_OLD + LP%W*DT_P + DD*DW_Z
-      ELSE
-         LP%U = UBAR
-         LP%V = VBAR
-         LP%W = WBAR
-         LP%X = X_OLD + LP%U*DT_P
-         LP%Y = Y_OLD + LP%V*DT_P
-         LP%Z = Z_OLD + LP%W*DT_P
-      ENDIF
+      LP%U = UBAR
+      LP%V = VBAR
+      LP%W = WBAR
+      LP%X = X_OLD + LP%U*DT_P
+      LP%Y = Y_OLD + LP%V*DT_P
+      LP%Z = Z_OLD + LP%W*DT_P
+   ENDIF
+   IF (TWO_D) THEN
+      LP%Y=Y_OLD
+      LP%V=0._EB
    ENDIF
    RETURN
 ENDIF TRACER_IF
+
+! Massive particles undergoing turbulent dispersion (EXPERIMENTAL, under construction)
+
+IF (LPC%TURBULENT_DISPERSION) THEN
+   ! Built model from ideas in this ref:
+   ! M. Breuer and M. Alletto, Efficient simulation of particle-laden turbulent flows with high mass loadings using LES,
+   ! Int. J. Heat and Fluid Flow, 35:2-12, 2012.
+   ! The basic idea is to add an isotropic turbulent fluctuation to the cell mean velocity components prior to
+   ! computing the drag.
+   DELTA = LES_FILTER_WIDTH_FUNCTION(DX(IIG_OLD),DY(JJG_OLD),DZ(KKG_OLD))
+   K_SGS = (MU(IIG_OLD,JJG_OLD,KKG_OLD)/RHO(IIG_OLD,JJG_OLD,KKG_OLD)/C_DEARDORFF/DELTA)**2 ! def of Deardorff eddy viscosity
+   U_P = SQRT(TWTH*K_SGS)
+   CALL BOX_MULLER(DW_X,DW_Y)
+   CALL BOX_MULLER(DW_Z,DW_X)
+   UBAR = UBAR + U_P*DW_X
+   VBAR = VBAR + U_P*DW_Y
+   WBAR = WBAR + U_P*DW_Z
+ENDIF
 
 ! Calculate the particle drag coefficient
 
 RVC   = RDX(IIG_OLD)*RRN(IIG_OLD)*RDY(JJG_OLD)*RDZ(KKG_OLD)
 RHO_G = RHO(IIG_OLD,JJG_OLD,KKG_OLD)
-UREL   = LP%U - UBAR
-VREL   = LP%V - VBAR
-WREL   = LP%W - WBAR
-QREL   = SQRT(UREL*UREL + VREL*VREL + WREL*WREL)
+UREL  = LP%U - UBAR
+VREL  = LP%V - VBAR
+WREL  = LP%W - WBAR
+IF (TWO_D) VREL=0._EB
+QREL  = SQRT(UREL*UREL + VREL*VREL + WREL*WREL)
 
 DRAG_LAW_SELECT: SELECT CASE (LPC%DRAG_LAW)
 
@@ -1814,7 +2237,9 @@ DRAG_LAW_SELECT: SELECT CASE (LPC%DRAG_LAW)
       ZZ_GET(1:N_TRACKED_SPECIES) = ZZ(IIG_OLD,JJG_OLD,KKG_OLD,1:N_TRACKED_SPECIES)
       CALL GET_VISCOSITY(ZZ_GET,MU_AIR,TMP_G)
       LP%RE  = RHO_G*QREL*2._EB*R_D/MU_AIR
-      C_DRAG = DRAG(LP%RE,LPC%DRAG_LAW)
+      KN = 0._EB
+      IF (LP%RE<1._EB) KN = MU_AIR*SQRT(0.5_EB*PI/(PBAR(KKG_OLD,PRESSURE_ZONE(IIG_OLD,JJG_OLD,KKG_OLD))*RHO_G))/(2._EB*R_D)
+      C_DRAG = DRAG(LP%RE,LPC%DRAG_LAW,KN)
 
       ! Primary break-up model
 
@@ -1827,9 +2252,16 @@ DRAG_LAW_SELECT: SELECT CASE (LPC%DRAG_LAW)
          ! Drag reduction model for liquid droplets
 
          WAKE_VEL=1.0_EB
-         IF (LPC%LIQUID_DROPLET) THEN
+         IF (.NOT.TEST_NEW_WAKE_REDUCTION .AND. LPC%LIQUID_DROPLET) THEN
             DROP_VOL_FRAC = MIN(1._EB,AVG_DROP_DEN(IIG_OLD,JJG_OLD,KKG_OLD,LPC%ARRAY_INDEX)/LPC%DENSITY)
             IF (DROP_VOL_FRAC > LPC%DENSE_VOLUME_FRACTION) CALL WAKE_REDUCTION(DROP_VOL_FRAC,LP%RE,C_DRAG,WAKE_VEL)
+         ENDIF
+
+         IF (TEST_NEW_WAKE_REDUCTION) THEN
+            KAPPA_E = AVG_DROP_AREA(IIG_OLD,JJG_OLD,KKG_OLD,LPC%ARRAY_INDEX)*NDPC(IIG_OLD,JJG_OLD,KKG_OLD) &
+                    * RDX(IIG_OLD)*RRN(IIG_OLD)*RDY(JJG_OLD)*RDZ(KKG_OLD)
+            L_WAKE = LES_FILTER_WIDTH_FUNCTION(DX(IIG_OLD),DY(JJG_OLD),DZ(KKG_OLD))
+            C_DRAG = C_DRAG * MAX(0._EB,MIN(1._EB,EXP(-KAPPA_E*L_WAKE)))
          ENDIF
 
          ! Secondary break-up model
@@ -1917,78 +2349,62 @@ ENDIF
 
 PARTICLE_NON_STATIC_IF: IF (.NOT.LPC%STATIC .OR. LP%EMBER) THEN ! Move airborne, non-stationary particles
 
-   IF (ITER==1) THEN
-      FP_MASS = (RHO_G/RVC)/NDPC(IIG_OLD,JJG_OLD,KKG_OLD) ! fluid parcel mass
-      IF (FREEZE_VELOCITY) FP_MASS = 1.E10_EB
-   ENDIF
-   BETA  = 0.5_EB*RHO_G*C_DRAG*A_DRAG*(1._EB/LP%MASS+1._EB/FP_MASS)*QREL
-   ALPHA = FP_MASS/LP%MASS
-   HALF_DT2 = 0.5_EB*DT_P*DT_P
-   OBDT  = 1._EB+BETA*DT_P
-   OPA   = 1._EB+ALPHA
-   DTOPA = DT_P/OPA
-   BDTOA = BETA*DTOPA
-
-   LP%U = ( U_OLD + (U_OLD+ALPHA*UBAR)*BDTOA )/OBDT
-   LP%V = ( V_OLD + (V_OLD+ALPHA*VBAR)*BDTOA )/OBDT
-   LP%W = ( W_OLD + (W_OLD+ALPHA*WBAR)*BDTOA )/OBDT
-
    ! Compute gravity components
 
-   IF (.NOT.SPATIAL_GRAVITY_VARIATION) THEN
+   IF (SPATIAL_GRAVITY_VARIATION) THEN
+      GX_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GX)*GVEC(1)
+      GY_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GY)*GVEC(2)
+      GZ_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GZ)*GVEC(3)
+   ELSEIF (I_RAMP_GX>0 .OR. I_RAMP_GY>0 .OR. I_RAMP_GZ>0) THEN
       GX_LOC = EVALUATE_RAMP(T,DUMMY,I_RAMP_GX)*GVEC(1)
       GY_LOC = EVALUATE_RAMP(T,DUMMY,I_RAMP_GY)*GVEC(2)
       GZ_LOC = EVALUATE_RAMP(T,DUMMY,I_RAMP_GZ)*GVEC(3)
    ELSE
-      GX_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GX)*GVEC(1)
-      GY_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GY)*GVEC(2)
-      GZ_LOC = EVALUATE_RAMP(X_OLD,DUMMY,I_RAMP_GZ)*GVEC(3)
+      GX_LOC = GVEC(1)
+      GY_LOC = GVEC(2)
+      GZ_LOC = GVEC(3)
    ENDIF
 
+   ! Update particle velocity
+
+   BETA = 0.5_EB*RHO_G*C_DRAG*A_DRAG*QREL/LP%MASS
+
    IF (BETA>TWO_EPSILON_EB) THEN
-      ! fluid momentum source term
+      LP%U = UBAR + (UREL-GX_LOC/BETA)*EXP(-BETA*DT_P) + GX_LOC/BETA
+      LP%V = VBAR + (VREL-GY_LOC/BETA)*EXP(-BETA*DT_P) + GY_LOC/BETA
+      LP%W = WBAR + (WREL-GZ_LOC/BETA)*EXP(-BETA*DT_P) + GZ_LOC/BETA
+   ELSE
+      LP%U = U_OLD + DT_P*GX_LOC
+      LP%V = V_OLD + DT_P*GY_LOC
+      LP%W = W_OLD + DT_P*GZ_LOC
+   ENDIF
+
+   ! Fluid momentum source term
+
+   IF (BETA>TWO_EPSILON_EB) THEN
       MPOM = LP%PWT*RVC/RHO_G
       LP%ACCEL_X = LP%ACCEL_X + MPOM*(LP%MASS*(U_OLD-LP%U)/DT + LP%M_DOT*UREL)
       LP%ACCEL_Y = LP%ACCEL_Y + MPOM*(LP%MASS*(V_OLD-LP%V)/DT + LP%M_DOT*VREL)
       LP%ACCEL_Z = LP%ACCEL_Z + MPOM*(LP%MASS*(W_OLD-LP%W)/DT + LP%M_DOT*WREL)
-
-      ! semi-analytical solution for PARTICLE position
-      ALBO = ALPHA*LOG(OBDT)/(BETA*OPA)
-      LP%X = X_OLD + (U_OLD+ALPHA*UBAR)*DTOPA + ALBO*(U_OLD-UBAR) + GX_LOC*HALF_DT2
-      LP%Y = Y_OLD + (V_OLD+ALPHA*VBAR)*DTOPA + ALBO*(V_OLD-VBAR) + GY_LOC*HALF_DT2
-      LP%Z = Z_OLD + (W_OLD+ALPHA*WBAR)*DTOPA + ALBO*(W_OLD-WBAR) + GZ_LOC*HALF_DT2
    ELSE
-      ! no drag
       LP%ACCEL_X  = 0._EB
       LP%ACCEL_Y  = 0._EB
       LP%ACCEL_Z  = 0._EB
-      LP%X = X_OLD + DT_P*U_OLD + GX_LOC*HALF_DT2
-      LP%Y = Y_OLD + DT_P*V_OLD + GY_LOC*HALF_DT2
-      LP%Z = Z_OLD + DT_P*W_OLD + GZ_LOC*HALF_DT2
    ENDIF
 
-   ! gravitational acceleration terms
+   ! Update particle position
 
-   LP%U = LP%U + GX_LOC*DT_P
-   LP%V = LP%V + GY_LOC*DT_P
-   LP%W = LP%W + GZ_LOC*DT_P
+   LP%X = X_OLD + 0.5_EB*DT_P*(LP%U+U_OLD)
+   LP%Y = Y_OLD + 0.5_EB*DT_P*(LP%V+V_OLD)
+   LP%Z = Z_OLD + 0.5_EB*DT_P*(LP%W+W_OLD)
 
-   ! 2nd-order terms for the particle relative velocities (experimental)
+   IF (AEROSOL_SCRUBBING) CALL DROPLET_SCRUBBING(IP,NM,DT,DT_P)
 
-   IF (LPC%SECOND_ORDER_PARTICLE_TRANSPORT .AND. DT_P>BETA*HALF_DT2) THEN
-      HAB = ALPHA*BETA*HALF_DT2/OPA
-      QREL2=QREL*QREL
-      IF (QREL2<TWO_EPSILON_EB) THEN
-         PARACOR = 0._EB
-      ELSE
-         PARACOR = (UREL*GX_LOC + VREL*GY_LOC + WREL*GZ_LOC)/QREL2
-      ENDIF
-      LP%U = LP%U - HAB*(GX_LOC + UREL*PARACOR)
-      LP%V = LP%V - HAB*(GY_LOC + VREL*PARACOR)
-      LP%W = LP%W - HAB*(GZ_LOC + WREL*PARACOR)
+   IF (TWO_D) THEN
+      LP%Y = Y_OLD
+      LP%V = 0._EB
+      LP%ACCEL_Y  = 0._EB
    ENDIF
-
-   IF (AEROSOL_SCRUBBING) CALL DROPLET_SCRUBBING(IP,NM)
 
    IF (PARTICLE_CFL) PART_UVWMAX = MAX(PART_UVWMAX,MAX( ABS(LP%U)*RDX(IIG_OLD),ABS(LP%V)*RDY(JJG_OLD),ABS(LP%W)*RDZ(KKG_OLD)))
 
@@ -2029,20 +2445,152 @@ ELSE PARTICLE_NON_STATIC_IF ! Drag calculation for stationary, airborne particle
          LP%ACCEL_X = -(MIN(DX(IIG_OLD),LP%DX)/DX(IIG_OLD))*(K_TERM(1)+Y_TERM(1))*UBAR*SFAC
          LP%ACCEL_Y = -(MIN(DY(JJG_OLD),LP%DY)/DY(JJG_OLD))*(K_TERM(2)+Y_TERM(2))*VBAR*SFAC
          LP%ACCEL_Z = -(MIN(DZ(KKG_OLD),LP%DZ)/DZ(KKG_OLD))*(K_TERM(3)+Y_TERM(3))*WBAR*SFAC
-         DRAG_MAX(1) = LP%ACCEL_X/(-UBAR+TWO_EPSILON_EB)
-         DRAG_MAX(2) = LP%ACCEL_Y/(-VBAR+TWO_EPSILON_EB)
-         DRAG_MAX(3) = LP%ACCEL_Z/(-WBAR+TWO_EPSILON_EB)
+         DRAG_MAX(1) = LP%ACCEL_X/(-UBAR-SIGN(1._EB,UBAR)*TWO_EPSILON_EB)
+         DRAG_MAX(2) = LP%ACCEL_Y/(-VBAR-SIGN(1._EB,VBAR)*TWO_EPSILON_EB)
+         DRAG_MAX(3) = LP%ACCEL_Z/(-WBAR-SIGN(1._EB,WBAR)*TWO_EPSILON_EB)
    END SELECT
+   IF (TWO_D) THEN
+      LP%ACCEL_Y  = 0._EB
+      DRAG_MAX(2) = 0._EB
+   ENDIF
    IF (ANY(ABS(DRAG_MAX)>PART_UVWMAX)) PART_UVWMAX = MAX(PART_UVWMAX,MAXVAL(DRAG_MAX))
 
 ENDIF PARTICLE_NON_STATIC_IF
 
+! store C_DRAG for output
+
+SELECT CASE(LPC%DRAG_LAW)
+   CASE DEFAULT
+      LP%C_DRAG = C_DRAG
+   CASE (SCREEN_DRAG, POROUS_DRAG)
+      LP%C_DRAG = MAXVAL(LPC%DRAG_COEFFICIENT)
+END SELECT
+
 END SUBROUTINE MOVE_IN_GAS
 
 
-SUBROUTINE WAKE_REDUCTION(DROP_VOL_FRAC,RE,C_DRAG,WAKE_VEL)
+!> \brief Test to see if particles should be removed from solid WALL or CFACE
+!> \details If a particle has hit a solid boundary (LP%WALL_INDEX>0 or LP%CFACE_INDEX>0) do the following:
+!> If the user has specified AMPUA (Accumulated Mass Per Unit Area) for
+!> a particle type, and the particle has not already been counted (LP%SPLAT=F), add its mass to an array.
+!> If the solid surface has an inward normal velocity (U_NORMAL>0) and
+!> this velocity is greater than a user-specified minimum (PARTICLE_EXTRACTION_VELOCITY) OR if a droplet has
+!> hit the floor (LP%Z<ZS) and the floor is POROUS, remove it.
 
-! Compute C_DRAG reduction due to the wake effect (Ramirez, Munoz et al. 2007)
+SUBROUTINE VENT_PARTICLE_EXTRACTION(HIT_SOLID,EXTRACT,WALL_INDEX,CFACE_INDEX)
+
+LOGICAL, INTENT(OUT) :: EXTRACT
+LOGICAL, INTENT(INOUT) :: HIT_SOLID
+LOGICAL :: SET_EXTRACT
+INTEGER, INTENT(IN), OPTIONAL :: WALL_INDEX,CFACE_INDEX
+INTEGER :: SURF_INDEX
+
+EXTRACT = .FALSE.
+SET_EXTRACT = .FALSE.
+
+IF (PRESENT(WALL_INDEX)) THEN
+   ONE_D => WALL(WALL_INDEX)%ONE_D
+   SURF_INDEX = WALL(WALL_INDEX)%SURF_INDEX
+ELSEIF (PRESENT(CFACE_INDEX)) THEN
+   ONE_D => CFACE(CFACE_INDEX)%ONE_D
+   SURF_INDEX = CFACE(CFACE_INDEX)%SURF_INDEX
+ENDIF
+
+IF (ACCUMULATE_WATER .AND. .NOT.LP%SPLAT .AND. LPC%ADHERE_TO_SOLID) THEN
+   ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) = ONE_D%A_LP_MPUA(LPC%ARRAY_INDEX) + LP%PWT*LPC%FTPR*R_D**3/ONE_D%AREA
+   LP%SPLAT = .TRUE.
+ENDIF
+
+IF ( ONE_D%U_NORMAL>SURFACE(SURF_INDEX)%PARTICLE_EXTRACTION_VELOCITY .OR. &
+     (POROUS_FLOOR .AND. LP%Z<ZS .AND. LPC%LIQUID_DROPLET) ) THEN
+   IF (ONE_D%NODE_INDEX > 0) THEN
+      IF (DUCTNODE(ONE_D%NODE_INDEX)%TRANSPORT_PARTICLES) THEN
+         SELECT CASE (ONE_D%IOR)
+            CASE(1)
+               IF(ONE_D%IIG-2 < 1) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG-2,ONE_D%JJG,ONE_D%KKG))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%X = X(ONE_D%IIG-2)-0.01_EB*DX(ONE_D%IIG-2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+            CASE(-1)
+               IF(ONE_D%IIG+2 > IBAR) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG+2,ONE_D%JJG,ONE_D%KKG))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%X = X(ONE_D%IIG+1)+0.01_EB*DX(ONE_D%IIG+2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+            CASE(2)
+               IF(ONE_D%JJG-2 < 1) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG,ONE_D%JJG-2,ONE_D%KKG))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%Y = Y(ONE_D%JJG-2)-0.01_EB*DY(ONE_D%JJG-2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+            CASE(-2)
+               IF(ONE_D%JJG+2 > JBAR) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG,ONE_D%JJG+2,ONE_D%KKG))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%Y = Y(ONE_D%JJG+1)+0.01_EB*DY(ONE_D%JJG+2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+            CASE(3)
+               IF(ONE_D%KKG-2 < 1) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG-2))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%Z = Z(ONE_D%KKG-2)-0.01_EB*DZ(ONE_D%KKG-2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+            CASE(-3)
+               IF(ONE_D%KKG+2 > KBAR) THEN
+                  SET_EXTRACT = .TRUE.
+               ELSE
+                  IF(SOLID(CELL_INDEX(ONE_D%IIG,ONE_D%JJG,ONE_D%KKG+2))) THEN
+                     SET_EXTRACT = .TRUE.
+                  ELSE
+                     LP%Z = Z(ONE_D%KKG+1)+0.01_EB*DZ(ONE_D%KKG+2)
+                     HIT_SOLID = .FALSE.
+                  ENDIF
+               ENDIF
+         END SELECT
+      ELSE
+         SET_EXTRACT = .TRUE.
+      ENDIF
+   ELSE
+      SET_EXTRACT = .TRUE.
+   ENDIF
+   IF (SET_EXTRACT) THEN
+      LP%X=-1.E6_EB
+      EXTRACT = .TRUE.
+   ENDIF
+ENDIF
+
+END SUBROUTINE VENT_PARTICLE_EXTRACTION
+
+
+!> \brief Compute C_DRAG reduction due to the wake effect (Ramirez, Munoz et al. 2007)
+
+SUBROUTINE WAKE_REDUCTION(DROP_VOL_FRAC,RE,C_DRAG,WAKE_VEL)
 
 REAL(EB), INTENT(INOUT) :: C_DRAG
 REAL(EB), INTENT(IN)  :: DROP_VOL_FRAC,RE
@@ -2058,10 +2606,11 @@ C_DRAG = C_DRAG * WAKE_VEL * (1._EB + (RELOD/LODM)*EXP(-RELOD))
 END SUBROUTINE WAKE_REDUCTION
 
 
-REAL(EB) FUNCTION SHAPE_DEFORMATION(RE,WE,C_DRAG)
+!> \brief Compute shape and drag of deformable droplets
+!>
+!> \detail E.Loth, Quasi-steady shape and drag of deformable bubbles and drops, International Journal of Multiphase Flow 34 (2008)
 
-! SHAPE DEFORMATION Loth, 2008
-! E.Loth, Quasi-steady shape and drag of deformable bubbles and drops, International Journal of Multiphase Flow 34 (2008)
+REAL(EB) FUNCTION SHAPE_DEFORMATION(RE,WE,C_DRAG)
 
 REAL(EB):: RE,WE,C_DRAG,C_DRAGNEW,E
 REAL(EB):: DC_DRAGSTAR,fSN,WERE02
@@ -2088,56 +2637,168 @@ END FUNCTION SHAPE_DEFORMATION
 END SUBROUTINE MOVE_PARTICLES
 
 
+!> \brief Compute mass and energy transfer between gas and liquid PARTICLEs
+!> \param T Current simulation time (s)
+!> \param DT Time step size (s)
+!> \param NM Current mesh index
+
 SUBROUTINE PARTICLE_MASS_ENERGY_TRANSFER(T,DT,NM)
 
-! Mass and energy transfer between gas and PARTICLEs
-
 USE PHYSICAL_FUNCTIONS, ONLY : GET_MASS_FRACTION,GET_AVERAGE_SPECIFIC_HEAT,GET_MOLECULAR_WEIGHT,GET_SPECIFIC_GAS_CONSTANT,&
-                               GET_SPECIFIC_HEAT,GET_MASS_FRACTION_ALL,GET_SENSIBLE_ENTHALPY,GET_VISCOSITY,GET_CONDUCTIVITY
-USE MATH_FUNCTIONS, ONLY: INTERPOLATE1D_UNIFORM,EVALUATE_RAMP
+                               GET_SPECIFIC_HEAT,GET_MASS_FRACTION_ALL,GET_SENSIBLE_ENTHALPY,GET_VISCOSITY,GET_CONDUCTIVITY,&
+                               GET_MW_RATIO, GET_EQUIL_DATA,DROPLET_H_MASS_H_HEAT_GAS
+USE MATH_FUNCTIONS, ONLY: INTERPOLATE1D_UNIFORM,EVALUATE_RAMP,F_B
 USE COMP_FUNCTIONS, ONLY: SHUTDOWN
 USE OUTPUT_DATA, ONLY: M_DOT,Q_DOT
-REAL(EB), POINTER, DIMENSION(:,:,:) :: DROP_DEN=>NULL(),DROP_RAD=>NULL(),DROP_TMP=>NULL(),MVAP_TOT=>NULL(),DROP_AREA=>NULL(),&
-                                       RHO_INTERIM=>NULL(),TMP_INTERIM=>NULL()
-REAL(EB), POINTER, DIMENSION(:,:,:,:) :: ZZ_INTERIM=>NULL()
-REAL(EB) :: R_DROP,NUSSELT,K_AIR,H_V,H_V_REF, H_L,H_V2,&
-            RVC,WGT,Q_CON_GAS,Q_CON_WALL,Q_RAD,H_HEAT,H_MASS,SH_FAC_GAS,SH_FAC_WALL,NU_FAC_GAS,NU_FAC_WALL,&
-            PR_AIR,M_VAP,M_VAP_MAX,MU_AIR,H_SOLID,Q_DOT_RAD,DEN_ADD,AREA_ADD,&
-            Y_DROP,Y_COND,Y_GAS,Y_GAS_NEW,LENGTH,U2,V2,W2,VEL,TMP_DROP_NEW,TMP_WALL,H_WALL,&
-            SC_AIR,D_AIR,DHOR,SHERWOOD,X_DROP,M_DROP,RHO_G,MW_RATIO,MW_DROP,FTPR,&
-            C_DROP,M_GAS,A_DROP,TMP_G,TMP_DROP,TMP_MELT,TMP_BOIL,MINIMUM_FILM_THICKNESS,RE_L,OMRAF,Q_FRAC,Q_TOT,DT_SUBSTEP,&
-            CP,H_NEW,ZZ_AIR(1:N_TRACKED_SPECIES),ZZ_GET(1:N_TRACKED_SPECIES),ZZ_GET2(1:N_TRACKED_SPECIES),&
-            M_GAS_NEW,MW_GAS,DELTA_H_G,TMP_G_I,H_G_OLD,H_S_G_OLD,H_D_OLD,C_GAS_DROP,C_GAS_AIR,&
-            TMP_G_NEW,DT_SUM,DCPDT,X_EQUIL,Y_EQUIL,Y_ALL(1:N_SPECIES),H_S_B,H_S,C_DROP2,&
-            T_BOIL_EFF,RAYLEIGH,GR,RHOCBAR,MCBAR,LEWIS,THETA,&
-            M_GAS_OLD,TMP_G_OLD,NU_LIQUID,H1,H2,TMP_FILM,CP_BAR_2,CP_AIR,R_AIR,RHO_AIR,Y_AIR,B_NUMBER, H_V_B, H_V_A, DH_V_A_DT
-REAL(EB), PARAMETER :: RUN_AVG_FAC=0.5_EB
-INTEGER :: IP,II,JJ,KK,IW,ICF,N_LPC,NS,ITMP,ITMP2,ITCOUNT,Y_INDEX,Z_INDEX,I_BOIL,I_MELT,I_FUEL,NMAT
+
 REAL(EB), INTENT(IN) :: T,DT
 INTEGER, INTENT(IN) :: NM
-LOGICAL :: TEMPITER
+
+REAL(EB), POINTER, DIMENSION(:,:,:) :: DROP_DEN=>NULL()
+!< Average particle density in a grid cell (kg/m3) used in updating AVG_DROP_DEN
+REAL(EB), POINTER, DIMENSION(:,:,:) :: DROP_RAD=>NULL()
+!< Average particle radius in a grid cell (m) used in updating AVG_DROP_RAD
+REAL(EB), POINTER, DIMENSION(:,:,:) :: DROP_TMP=>NULL()
+!< Average particle temperature in a grid cell (K) used in updating AVG_DROP_TMP
+REAL(EB), POINTER, DIMENSION(:,:,:) :: DROP_AREA=>NULL()
+!< Average particle cross sectional areat in a grid cell (m2) used in updating AVG_DROP_AREA
+REAL(EB), POINTER, DIMENSION(:,:,:) :: MVAP_TOT=>NULL()
+!< Amount of mass evaporated into a grid cell (kg)
+REAL(EB), POINTER, DIMENSION(:,:,:) :: RHO_INTERIM=>NULL()
+!< Current gas density (kg/m3)
+REAL(EB), POINTER, DIMENSION(:,:,:) :: TMP_INTERIM=>NULL()
+!< Current gas temperature (K)
+REAL(EB), POINTER, DIMENSION(:,:,:,:) :: ZZ_INTERIM=>NULL()
+!< Current gas species mass fractions
+REAL(EB) :: ZZ_AIR(1:N_TRACKED_SPECIES) !< Species mass fractioms in the film
+REAL(EB) :: CP_AIR !< Specific heat of the film (J/kg/K) at the film temperature
+REAL(EB) :: D_AIR !< Diffusivity into air of the droplet species (m2/s) at the film temperature
+REAL(EB) :: K_AIR !< Conducitvity of the film (W/m/K) at the film temperature
+REAL(EB) :: R_AIR !< Specfic gas constant  the film (J/kg/K)
+REAL(EB) :: RHO_AIR !< Density of the film (kg/m3) at the film temperature
+REAL(EB) :: MU_AIR !< Viscosity of the film (kg/m/s) at the film temperature
+REAL(EB) :: PR_AIR !< Prandtl number of the film
+REAL(EB) :: SC_AIR !< Schmidt number of the film
+REAL(EB) :: Y_AIR !< Droplet species mass fraction in the film
+REAL(EB) :: CP !< Specific heat (J/kg/K)
+REAL(EB) :: DCPDT !< Temperature derivative of the specific heat (J/kg/K2)
+REAL(EB) :: C_DROP2 !< Specific heat of particle (J/kg/K)
+REAL(EB) :: CP_BAR !< Average specific heat (J/kg/K)
+REAL(EB) :: CP_BAR_2 !< Average specific heat (J/kg/K)
+REAL(EB) :: H1 !< Sensible enthalpy (J/kg/K)
+REAL(EB) :: H2 !< Sensible enthalpy (J/kg/K)
+REAL(EB) :: H_D_OLD !< Particle enthalpy (J) at the start of a sub time step
+REAL(EB) :: H_G_OLD !< Gas enthalpy (J) at the start of a sub time step
+REAL(EB) :: H_S_G_OLD !< Sensible enthalpy of the gas (J) at the start of a sub time step
+REAL(EB) :: H_NEW !<  Total gas and particle enthalpy (J) at the end of a sub time step
+REAL(EB) :: H_V !< Heat of vaporization at the particle temperature (J/kg)
+REAL(EB) :: H_V2 !< Heat of vaporization at the particle temperature (J/kg)
+REAL(EB) :: H_V_A !< Effective heat of vaporization for use in the Clasius-Clapeyron relation (J/kg)
+REAL(EB) :: DH_V_A_DT !< Temperature derivative of H_VA (J/kg/K)
+REAL(EB) :: H_V_REF !< Heat of vaporization at the species heat of vaporization reference temperature (J/kg)
+REAL(EB) :: H_L !< Enthalpy of the particle (J)
+REAL(EB) :: H_S !< Sensible enthalpy of the vapor (J) at the gas temperature
+REAL(EB) :: H_S_B !< Sensible enthalpy of the vapor (J) at the particle temperature
+REAL(EB) :: DELTA_H_G !< H_S_B - H_S (J)
+REAL(EB) :: M_GAS !< Mass of the gas (kg) in the grid cell
+REAL(EB) :: RHO_G !< Current gas density (kg/m3)
+REAL(EB) :: M_GAS_NEW !< Mass of gas (kg) in the grid cell at the end of a sub time step
+REAL(EB) :: M_GAS_OLD !< Mass of gas (kg) in a grid cell at the start of a sub time step
+REAL(EB) :: MW_GAS !< Molecular weight (kg/kmol) of the gas
+REAL(EB) :: MW_RATIO !< Ratio of average gas molecular weigth to particle species molecular weight
+REAL(EB) :: RVC !< Inverse of the cell volume (1/m3)
+REAL(EB) :: WGT !< LAGRANGIAN_PARTICLE%PWT
+REAL(EB) :: Q_CON_GAS !< Convective heat transfer between the particle and the gas (J)
+REAL(EB) :: Q_CON_SUM !< Sum of convective heat transfer between the particle and the surface over subtimesteps (J)
+REAL(EB) :: Q_CON_WALL !< Convective heat transfer between the particle and a surface (J)
+REAL(EB) :: Q_DOT_RAD ! Radiant heat transfer rate to particle (J/s)
+REAL(EB) :: Q_FRAC !< Heat transfer adjustment factor when particle reaches boiling temperature during a sub time step
+REAL(EB) :: Q_RAD !< Net radiation heat transfer to the particle (J)
+REAL(EB) :: Q_RAD_SUM !< Sum of radiant heat transfer to the particle over subtimesteps (J)
+REAL(EB) :: Q_TOT !< Total heat transfer from convection and radiation to the particle (J)
+REAL(EB) :: H_HEAT !< Convection heat transfer coefficient between the particle and the gas (W/m2/K)
+REAL(EB) :: H_WALL !< Convection heat transfer coefficient between the particle and a surface (W/m2/K)
+REAL(EB) :: H_MASS !< Mass transfer coefficient (m/s)
+REAL(EB) :: LENGTH !< Length scale used in computing SH and NU
+REAL(EB) :: GR !< Particle Grashof number
+REAL(EB) :: RAYLEIGH !< Particle Rayleigh number
+REAL(EB) :: RE_L !< Particle Reynolds number
+REAL(EB) :: NUSSELT !< Nusselt number
+REAL(EB) :: SHERWOOD !< Particle Sherwood number
+REAL(EB) :: SH_FAC_GAS !< Sherwood number of a particle in the gas
+REAL(EB) :: SH_FAC_WALL !< Sherwood number of a particle on a surface
+REAL(EB) :: NU_FAC_GAS !< Nusselt number of a particle in the gas
+REAL(EB) :: NU_FAC_WALL !< Nusselt number of a particle on a surface
+REAL(EB) :: M_VAP !< Mass evaporated (kg) from the particle in the current sub time step
+REAL(EB) :: M_VAP_MAX !< Maximum allowable evaporation (kg)
+REAL(EB) :: DEN_ADD !< Weighted drop mass divided by cell volume (kg/m3)
+REAL(EB) :: AREA_ADD !< Weighted drop area divided by cell volume (1/m)
+REAL(EB) :: Y_ALL(1:N_SPECIES) !< Mass fraction of all primitive species
+REAL(EB) :: X_DROP !< Equilibirum vapor mole fraction at the particle temperature
+REAL(EB) :: Y_DROP !< Equilibrium vapor mass fraction at the particle temperature
+REAL(EB) :: Y_COND !< Fraction of mass associated with any condensed vapor of the particle species
+REAL(EB) :: Y_GAS !< Vapor fraction of the particle species
+REAL(EB) :: Y_GAS_NEW !< End of sub time step vapor fraction of the particle species
+REAL(EB) :: X_EQUIL !< Equilibrium vapor mole fraction
+REAL(EB) :: Y_EQUIL !< Equilibrium vapor mass fraction
+REAL(EB) :: U2 !< Relative u-velocity (m/s)
+REAL(EB) :: V2 !< Relative v-velocity (m/s)
+REAL(EB) :: W2 !< Relative w-velocity (m/s)
+REAL(EB) :: VEL !< Relative velocity (m/s)
+REAL(EB) :: A_DROP !< Particle surface area (m2)
+REAL(EB) :: C_DROP !< Specific heat of the particle (J/kg/K) at the current temperature
+REAL(EB) :: DHOR !< Heat of vaporization divided by the gas constant (K).
+REAL(EB) :: FTPR !< 4/3 * PI * Particle density
+REAL(EB) :: M_DROP !< Mass of the  particle (kg)
+REAL(EB) :: R_DROP !< Particle radius (m)
+REAL(EB) :: MW_DROP !< Particle molecular weight (kg/kmol)
+REAL(EB) :: T_BOIL_EFF !< Effective boiling temperature (K) of the particle at the current pressuer
+REAL(EB) :: TMP_G_OLD !< Gas temperature (K) at the start of sub time step
+REAL(EB) :: TMP_G !< Current gas temperature (K)
+REAL(EB) :: TMP_G_I !< Gas temperature during search loop (K)
+REAL(EB) :: TMP_G_NEW !< Gas temperature (K) at the end of a sub time step
+REAL(EB) :: TMP_DROP !< Current particle temperature (K)
+REAL(EB) :: TMP_DROP_NEW !< End of sub time step particle temperature (K)
+REAL(EB) :: TMP_FILM !< Film temperature (K)
+REAL(EB) :: TMP_MELT !< Melting temperaturte of the particle species (K)
+REAL(EB) :: TMP_WALL !< Wall surface temperature (K)
+REAL(EB) :: TMP_WALL_NEW !< New surface temperature (K)
+REAL(EB) :: DT_SUBSTEP !< Current sub time step size (s)
+REAL(EB) :: DT_SUM !< Running sum of completed sub time steps (s)
+REAL(EB) :: ZZ_GET(1:N_TRACKED_SPECIES)
+REAL(EB) :: ZZ_GET2(1:N_TRACKED_SPECIES)
+REAL(EB) :: RHOCBAR ! Density of solid surface times specific heat the solid surface (J/m3/K)
+REAL(EB) :: MCBAR !< Particle mass time particle specific heat (J/K)
+REAL(EB) :: NU_LIQUID !< Kinematic viscosity of the particle species (m2/s)
+REAL(EB) :: B_NUMBER !< Particle B number
+REAL(EB) :: AGHRHO !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTGOG !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTGOP !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTWOW !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTWOP !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTOG !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DTOP !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DAHVHLDY !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DADYHV !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DADYDTHVHL !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DADYDTHV !< Collection of terms used in contstructing A_COL, B_COL, C_COL, and D_COL
+REAL(EB) :: DYDT !< Temperature derivative of the equilbirum vapor fraciton (1/K)
+REAL(EB) :: A_COL(3) !< Gas temperature terms in LHS of solution
+REAL(EB) :: B_COL(3) !< Particle temperatre terms in LHS of solution
+REAL(EB) :: C_COL(3) !< Wall temperature terms in LHS of solution
+REAL(EB) :: D_VEC(3) !< RHS of solution
+INTEGER :: IP,II,JJ,KK,IW,ICF,N_LPC,ITMP,ITMP2,ITCOUNT,Y_INDEX,Z_INDEX,I_BOIL,I_MELT,NMAT
+INTEGER :: ARRAY_CASE
+!< 1 = Particle in gas only, 2 = Particle on constant temperature surface, 3 = Particle on thermally thick surface
+LOGICAL :: TEMPITER !< Flag to continue temperature search iteration
 CHARACTER(MESSAGE_LENGTH) :: MESSAGE
 TYPE (LAGRANGIAN_PARTICLE_TYPE), POINTER :: LP=>NULL()
 TYPE (LAGRANGIAN_PARTICLE_CLASS_TYPE), POINTER :: LPC=>NULL()
 TYPE(ONE_D_M_AND_E_XFER_TYPE), POINTER :: ONE_D
 TYPE (SURFACE_TYPE), POINTER :: SF=>NULL()
 TYPE (SPECIES_TYPE), POINTER :: SS=>NULL()
-REAL(EB) :: AGHRHO, DTGOG, DTGOP, DTWOW, DTWOP, DTOG, DTOP, DYDT, A_COL(3), B_COL(3), C_COL(3), D_VEC(3), CP_BAR, &
-            DADYDTHVHL, DADYDTHV, TMP_WALL_NEW
-INTEGER :: ARRAY_CASE
 
 CALL POINT_TO_MESH(NM)
-
-! Initializations
-
-OMRAF  = 1._EB - RUN_AVG_FAC
-M_DOT(2,NM) = 0._EB ! Fuel mass loss rate of droplets
-M_DOT(4,NM) = 0._EB ! Total mass loss rate of droplets
-
-! Rough estimates
-
-MINIMUM_FILM_THICKNESS = 1.E-5_EB   ! Minimum thickness of liquid film on the surface (m)
-H_SOLID                = 300._EB    ! Heat transfer coefficient from solid surface to drop (W/m2/K)
 
 ! Working arrays
 
@@ -2145,13 +2806,9 @@ IF (N_LP_ARRAY_INDICES>0) THEN
    MVAP_TOT => WORK7
    MVAP_TOT = 0._EB
    DO IW = 1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
-      WALL(IW)%ONE_D%LP_CPUA  = RUN_AVG_FAC*WALL(IW)%ONE_D%LP_CPUA
-      WALL(IW)%ONE_D%LP_MPUA  = RUN_AVG_FAC*WALL(IW)%ONE_D%LP_MPUA
       WALL(IW)%ONE_D%WORK1    = WALL(IW)%ONE_D%TMP_F
    ENDDO
    DO ICF = 1,N_CFACE_CELLS
-      CFACE(ICF)%ONE_D%LP_CPUA  = RUN_AVG_FAC*CFACE(ICF)%ONE_D%LP_CPUA
-      CFACE(ICF)%ONE_D%LP_MPUA  = RUN_AVG_FAC*CFACE(ICF)%ONE_D%LP_MPUA
       CFACE(ICF)%ONE_D%WORK1    = CFACE(ICF)%ONE_D%TMP_F
    ENDDO
 ENDIF
@@ -2161,6 +2818,24 @@ IF (ANY(LAGRANGIAN_PARTICLE_CLASS(:)%LIQUID_DROPLET)) THEN
    TMP_INTERIM => WORK2 ; TMP_INTERIM = TMP
    ZZ_INTERIM  => SCALAR_WORK1 ; ZZ_INTERIM = ZZ
 ENDIF
+
+! Keep a running average of surface mass and cooling
+
+DO N_LPC=1,N_LAGRANGIAN_CLASSES
+   LPC => LAGRANGIAN_PARTICLE_CLASS(N_LPC)
+   IF (LPC%ARRAY_INDEX>0) THEN
+      DO IW = 1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
+         WALL(IW)%ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = 0._EB
+         WALL(IW)%ONE_D%LP_CPUA(LPC%ARRAY_INDEX) = LPC%RUNNING_AVERAGE_FACTOR_WALL*WALL(IW)%ONE_D%LP_CPUA(LPC%ARRAY_INDEX)
+         WALL(IW)%ONE_D%LP_MPUA(LPC%ARRAY_INDEX) = LPC%RUNNING_AVERAGE_FACTOR_WALL*WALL(IW)%ONE_D%LP_MPUA(LPC%ARRAY_INDEX)
+      ENDDO
+      DO ICF = 1,N_CFACE_CELLS
+         CFACE(ICF)%ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = 0._EB
+         CFACE(ICF)%ONE_D%LP_CPUA(LPC%ARRAY_INDEX) = LPC%RUNNING_AVERAGE_FACTOR_WALL*CFACE(ICF)%ONE_D%LP_CPUA(LPC%ARRAY_INDEX)
+         CFACE(ICF)%ONE_D%LP_MPUA(LPC%ARRAY_INDEX) = LPC%RUNNING_AVERAGE_FACTOR_WALL*CFACE(ICF)%ONE_D%LP_MPUA(LPC%ARRAY_INDEX)
+      ENDDO
+   ENDIF
+ENDDO
 
 ! Loop over all types of evaporative species
 
@@ -2172,7 +2847,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
    Y_INDEX = MAXVAL(MAXLOC(SPECIES_MIXTURE(Z_INDEX)%VOLUME_FRACTION))
    SS => SPECIES(Y_INDEX)
    TMP_MELT = SS%TMP_MELT
-   TMP_BOIL = SS%TMP_V
    MW_DROP  = SS%MW
    CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%H_V,1),SS%H_V,SS%H_V_REFERENCE_TEMPERATURE,H_V_REF)
    I_MELT   = INT(TMP_MELT)
@@ -2188,6 +2862,10 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
 
    FILM_SUMMING_LOOP: DO IP=1,NLP
       LP  => LAGRANGIAN_PARTICLE(IP)
+      LPC => LAGRANGIAN_PARTICLE_CLASS(LP%CLASS_INDEX)
+      IF (.NOT.LPC%LIQUID_DROPLET) CYCLE FILM_SUMMING_LOOP
+      IF (LPC%Z_INDEX/=Z_INDEX) CYCLE FILM_SUMMING_LOOP
+      IF (LP%ONE_D%X(1)<=LPC%KILL_RADIUS) CYCLE FILM_SUMMING_LOOP
       IF (LP%WALL_INDEX>0) THEN
          ONE_D => WALL(LP%WALL_INDEX)%ONE_D
       ELSEIF (LP%CFACE_INDEX>0) THEN
@@ -2195,10 +2873,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
       ELSE
          CYCLE FILM_SUMMING_LOOP
       ENDIF
-      LPC => LAGRANGIAN_PARTICLE_CLASS(LP%CLASS_INDEX)
-      IF (.NOT.LPC%LIQUID_DROPLET) CYCLE FILM_SUMMING_LOOP
-      IF (LPC%Z_INDEX/=Z_INDEX) CYCLE FILM_SUMMING_LOOP
-      IF (LP%ONE_D%X(1)<=LPC%KILL_RADIUS) CYCLE FILM_SUMMING_LOOP
       ONE_D%WORK2 = ONE_D%WORK2 + LP%PWT*LP%ONE_D%X(1)**3/ONE_D%AREA  ! FILM_THICKNESS
    ENDDO FILM_SUMMING_LOOP
 
@@ -2234,17 +2908,15 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
       JJ = LP%ONE_D%JJG
       KK = LP%ONE_D%KKG
       RVC = RDX(II)*RRN(II)*RDY(JJ)*RDZ(KK)
-      CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%H_V,1),SS%H_V,TMP_BOIL,H_V_B)
-      DHOR = H_V_B*MW_DROP/R0
-      ! Boiling temperature at current background pressure and update H_V_B
-      T_BOIL_EFF = MAX(0._EB,DHOR*TMP_BOIL/(DHOR-TMP_BOIL*LOG(PBAR(0,PRESSURE_ZONE(II,JJ,KK))/P_STP)+TWO_EPSILON_EB))
-      CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%H_V,1),SS%H_V,T_BOIL_EFF,H_V_B)
-      I_BOIL   = INT(T_BOIL_EFF)
+
       ! Determine how many sub-time step iterations are needed and then iterate over the time step.
 
-      DT_SUBSTEP = DT/REAL(N_INITIAL_PARTICLE_SUBSTEPS,EB)
+      DT_SUBSTEP = DT
       DT_SUM = 0._EB
       WGT    = LP%PWT
+      LP%M_DOT = 0._EB
+      Q_CON_SUM = 0._EB
+      Q_RAD_SUM = 0._EB
 
       Y_COND = 0._EB
 
@@ -2269,14 +2941,17 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
             FTPR     = FOTHPI * LP%ONE_D%MATL_COMP(1)%RHO(1)
             M_DROP   = FTPR*R_DROP**3
             TMP_DROP = LP%ONE_D%TMP(1)
-            CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%H_V,1),SS%H_V,TMP_DROP,H_V)
+            T_BOIL_EFF = SS%TMP_V
+            CALL GET_EQUIL_DATA(MW_DROP,TMP_DROP,PBAR(KK,PRESSURE_ZONE(II,JJ,KK)),H_V,H_V_A,T_BOIL_EFF,X_DROP,&
+                                H_V_LOWER=LBOUND(SS%H_V,1),H_V_DATA=SS%H_V)
+            I_BOIL   = INT(T_BOIL_EFF)
+
             IF (H_V < 0._EB) THEN
                WRITE(MESSAGE,'(A,A)') 'Numerical instability in particle energy transport, H_V for ',TRIM(SS%ID)
                CALL SHUTDOWN(MESSAGE)
                RETURN
             ENDIF
 
-            H_V_A = 0.5_EB*(H_V+H_V_B)
             IF (INT(TMP_DROP) < INT(T_BOIL_EFF)) THEN
                DH_V_A_DT = 0.5_EB*(SS%H_V(INT(TMP_DROP)+1) - SS%H_V(INT(TMP_DROP)))
             ELSE
@@ -2320,24 +2995,10 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
             ENDIF SOLID_OR_GAS_PHASE_1
 
             ! Determine the ratio of molecular weights between the gas and droplet vapor
+            CALL GET_MW_RATIO(Y_INDEX,MW_RATIO,Y_IN=Y_ALL)
 
-            MW_GAS = 0._EB
-            IF (ABS(Y_GAS-1._EB) > TWO_EPSILON_EB) THEN
-               DO NS=1,N_SPECIES
-                  IF (NS==Y_INDEX) CYCLE
-                  MW_GAS = MW_GAS + Y_ALL(NS)/SPECIES(NS)%MW
-               ENDDO
-               IF (Y_COND > TWO_EPSILON_EB) &
-                  MW_GAS = MW_GAS + Y_COND/SPECIES(Y_INDEX)%MW
-               IF (MW_GAS<=TWO_EPSILON_EB) THEN
-                  MW_GAS=SPECIES_MIXTURE(1)%MW
-               ELSE
-                  MW_GAS = (1._EB-Y_GAS)/MW_GAS
-               ENDIF
-            ELSE
-               MW_GAS=SPECIES_MIXTURE(1)%MW
-            ENDIF
-            MW_RATIO = MW_GAS/MW_DROP
+            ! Get actual MW of current gas for D_SOURCE
+            CALL GET_MOLECULAR_WEIGHT(ZZ_GET,MW_GAS)
 
             ! Decide whether to evporate the entire droplet or only part of it
 
@@ -2345,9 +3006,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
 
                M_VAP = M_DROP
                Q_RAD = M_VAP*H_V
-               I_FUEL = 0
-               IF (N_REACTIONS>0) I_FUEL = REACTION(1)%FUEL_SMIX_INDEX
-               IF (LPC%Z_INDEX==I_FUEL .AND. I_FUEL>0) M_VAP = LPC%ADJUST_EVAPORATION*M_VAP
+               M_VAP = LPC%ADJUST_EVAPORATION*M_VAP
 
                ! Compute contribution to the divergence
 
@@ -2356,9 +3015,9 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                CALL GET_SENSIBLE_ENTHALPY(ZZ_GET,H_S_B,TMP_DROP)
                CALL GET_SENSIBLE_ENTHALPY(ZZ_GET,H_S,TMP_G)
                DELTA_H_G = H_S_B - H_S
-               D_SOURCE(II,JJ,KK) = D_SOURCE(II,JJ,KK) + (MW_RATIO*M_VAP/M_GAS + (M_VAP*DELTA_H_G)/H_S_G_OLD) * WGT / DT
+               D_SOURCE(II,JJ,KK) = D_SOURCE(II,JJ,KK) + (MW_GAS/MW_DROP*M_VAP/M_GAS + (M_VAP*DELTA_H_G)/H_S_G_OLD) * WGT / DT
                M_DOT_PPP(II,JJ,KK,Z_INDEX) = M_DOT_PPP(II,JJ,KK,Z_INDEX) + M_VAP*RVC*WGT/DT
-               LP%M_DOT = M_VAP/DT
+               LP%M_DOT = LP%M_DOT + M_VAP/DT
 
                ! Add energy losses and gains to overall energy budget array
 
@@ -2366,8 +3025,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                Q_DOT(3,NM) = Q_DOT(3,NM) + M_VAP*H_S_B*WGT/DT                       ! Q_CONV
                Q_DOT(2,NM) = Q_DOT(2,NM) + Q_RAD*WGT/DT                             ! Q_RADI
 
-               IF (LPC%Z_INDEX==I_FUEL .AND. I_FUEL>0) M_DOT(2,NM) = M_DOT(2,NM) + WGT*M_VAP/DT/LPC%ADJUST_EVAPORATION
-               M_DOT(4,NM) = M_DOT(4,NM) + WGT*M_VAP/DT  ! Total mass loss rate
+               IF (LPC%Z_INDEX>0) M_DOT(LPC%Z_INDEX,NM) = M_DOT(LPC%Z_INDEX,NM) + WGT*M_VAP/DT/LPC%ADJUST_EVAPORATION
 
                ! Keep track of total mass evaporated in cell
 
@@ -2379,15 +3037,12 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%C_P_L_BAR,1),SS%C_P_L_BAR,TMP_DROP,H_L)
                H_L = H_L*TMP_DROP
                H_D_OLD  = H_L*M_DROP
-               DHOR     = H_V_A*MW_DROP/R0
                ZZ_GET(1:N_TRACKED_SPECIES) = ZZ_INTERIM(II,JJ,KK,1:N_TRACKED_SPECIES)
                ! Compute equilibrium PARTICLE vapor mass fraction, Y_DROP, and its derivative w.r.t. PARTICLE temperature
-               X_DROP  = MIN(1._EB,EXP(DHOR*(1._EB/T_BOIL_EFF-1._EB/TMP_DROP)))
                Y_DROP  = X_DROP/(MW_RATIO + (1._EB-MW_RATIO)*X_DROP)
-
                ! Compute effective Z at the film temperature location LC Eq (19). Skip if no evaporation will occur.
                IF (Y_DROP > Y_GAS) THEN
-                  B_NUMBER = (Y_DROP - Y_GAS) / MAX(1.E-8_EB,1._EB-Y_DROP)
+                  B_NUMBER = (Y_DROP - Y_GAS) / MAX(DY_MIN_BLOWING,1._EB-Y_DROP)
                   Y_AIR = Y_DROP + EVAP_FILM_FAC * (Y_GAS - Y_DROP)
                   ZZ_AIR = ZZ_GET
                   ZZ_AIR(Z_INDEX) = ZZ_AIR(Z_INDEX) + (Y_AIR - Y_GAS)/(1-Y_AIR)
@@ -2413,7 +3068,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                NU_FAC_WALL            = 0.037_EB*PR_AIR**ONTH
 
                ! Compute temperature deriviative of the vapor mass fraction
-
+               DHOR     = H_V_A*MW_DROP/R0
                DYDT = (MW_RATIO/(X_DROP*(1._EB-MW_RATIO)+MW_RATIO)**2) * &
                       (DHOR*X_DROP/TMP_DROP**2+(1._EB/T_BOIL_EFF-1._EB/TMP_DROP)*DH_V_A_DT*MW_DROP/R0)
 
@@ -2421,9 +3076,9 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
 
                SOLID_OR_GAS_PHASE_2: IF (LP%ONE_D%IOR/=0 .AND. (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0)) THEN
 
-                  ! Compute mcbap = rho_w a_w cp_w dx_w for first wall cell for limiting convective heat transfer
+                  ! Compute mcbar = rho_w a_w cp_w dx_w for first wall cell for limiting convective heat transfer
 
-                  IF (SF%THERMALLY_THICK) THEN
+                  IF (SF%THERMAL_BC_INDEX==THERMALLY_THICK) THEN
                      RHOCBAR = 0._EB
                      DO NMAT=1,SF%N_MATL
                         IF (ONE_D%MATL_COMP(NMAT)%RHO(1)<=TWO_EPSILON_EB) CYCLE
@@ -2445,7 +3100,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      ARRAY_CASE = 2
                   ENDIF
 
-                  IF (.NOT.CONSTANT_H_SOLID) THEN
+                  IF (LPC%HEAT_TRANSFER_COEFFICIENT_SOLID<0._EB) THEN
                      LENGTH = 2._EB*R_DROP
                      NU_LIQUID = SS%MU_LIQUID / LPC%DENSITY
                      !Grashoff number
@@ -2474,7 +3129,8 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      ! Incropera and Dewitt, Fundamentals of Heat and Mass Transfer, 7th Edition
                      NUSSELT  = NU_FAC_WALL*RE_L**0.8_EB-871._EB
                      SHERWOOD = SH_FAC_WALL*RE_L**0.8_EB-871._EB
-                     H_WALL   = H_SOLID
+                     H_WALL   = LPC%HEAT_TRANSFER_COEFFICIENT_SOLID
+
                   ENDIF
                   H_HEAT   = MAX(2._EB,NUSSELT)*K_AIR/LENGTH
                   IF (Y_DROP<=Y_GAS) THEN
@@ -2493,113 +3149,63 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                ELSE SOLID_OR_GAS_PHASE_2
                   LENGTH = 2._EB*R_DROP
                   RE_L = RHO_AIR*VEL*LENGTH/MU_AIR
-                  SELECT CASE (EVAP_MODEL)
-                     CASE(-1) ! Ranz Marshall
-                        NUSSELT  = 2._EB + NU_FAC_GAS*SQRT(RE_L)
-                        H_HEAT   = NUSSELT*K_AIR/LENGTH
-                        IF (Y_DROP <= Y_GAS) THEN
-                           H_MASS   = 0._EB
-                        ELSE
-                           SHERWOOD = 2._EB + SH_FAC_GAS*SQRT(RE_L)
-                           H_MASS   = SHERWOOD*D_AIR/LENGTH
-                        ENDIF
-                     CASE(0) ! Sazhin M0, Eq 106 + 109 with B_T=B_M
-                        IF (Y_DROP <= Y_GAS) THEN
-                           NUSSELT  = 2._EB + NU_FAC_GAS*SQRT(RE_L)
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                           H_MASS   = 0._EB
-                        ELSE
-                           NUSSELT  = ( 2._EB + NU_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/B_NUMBER
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                           SHERWOOD = ( 2._EB + SH_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/(Y_DROP-Y_GAS)
-                           H_MASS   = SHERWOOD*D_AIR/LENGTH
-                           ! above we save a divide and multiply of B_NUMBER
-                           ! the full model corresponding to Sazhin (108) and (109) would be
-                           ! SH = SH_0 * LOG(1+B_M)/B_M
-                           ! H_MASS = SH * D/L * B_M/(Y_D-Y_G)
-                        ENDIF
-                     CASE(1) ! Sazhin M1, Eq 106 + 109 with eq 102.
-                        IF (Y_DROP <= Y_GAS) THEN
-                           NUSSELT  = 2._EB + NU_FAC_GAS*SQRT(RE_L)
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                           H_MASS   = 0._EB
-                        ELSE
-                           SHERWOOD = ( 2._EB + SH_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/(Y_DROP-Y_GAS)
-                           H_MASS   = SHERWOOD*D_AIR/LENGTH
-                           LEWIS    = K_AIR / (RHO_AIR * D_AIR * CP_AIR)
-                           ZZ_GET(1:N_TRACKED_SPECIES) = 0._EB
-                           ZZ_GET(Z_INDEX) = 1._EB
-                           CALL GET_SPECIFIC_HEAT(ZZ_AIR,C_GAS_DROP,TMP_FILM)
-                           ZZ_GET(1:N_TRACKED_SPECIES) = ZZ_INTERIM(II,JJ,KK,1:N_TRACKED_SPECIES)
-                           CALL GET_SPECIFIC_HEAT(ZZ_AIR,C_GAS_AIR,TMP_FILM)
-                           THETA = C_GAS_DROP/C_GAS_AIR/LEWIS
-                           B_NUMBER = (1._EB+B_NUMBER)**THETA-1._EB
-                           NUSSELT  = ( 2._EB + NU_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/B_NUMBER
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                        ENDIF
-                     CASE(2) ! Sazhin M2, Eq 116 and 117 with eq 106, 109, and 102.
-                        IF (Y_DROP <= Y_GAS) THEN
-                           NUSSELT  = 2._EB + NU_FAC_GAS*SQRT(RE_L)
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                           H_MASS   = 0._EB
-                        ELSE
-                           SHERWOOD = ( 2._EB + SH_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/((Y_DROP-Y_GAS)*F_B(B_NUMBER))
-                           H_MASS   = SHERWOOD*D_AIR/LENGTH
-                           LEWIS    = K_AIR / (RHO_AIR * D_AIR * CP_AIR)
-                           ZZ_GET(1:N_TRACKED_SPECIES) = 0._EB
-                           ZZ_GET(Z_INDEX) = 1._EB
-                           CALL GET_SPECIFIC_HEAT(ZZ_AIR,C_GAS_DROP,TMP_FILM)
-                           ZZ_GET(1:N_TRACKED_SPECIES) = ZZ_INTERIM(II,JJ,KK,1:N_TRACKED_SPECIES)
-                           CALL GET_SPECIFIC_HEAT(ZZ_AIR,C_GAS_AIR,TMP_FILM)
-                           THETA = C_GAS_DROP/C_GAS_AIR/LEWIS
-                           B_NUMBER = (1._EB+B_NUMBER)**THETA-1._EB
-                           NUSSELT  = ( 2._EB + NU_FAC_GAS*SQRT(RE_L) )*LOG(1._EB+B_NUMBER)/(B_NUMBER*F_B(B_NUMBER))
-                           H_HEAT   = NUSSELT*K_AIR/LENGTH
-                        ENDIF
-                  END SELECT
+                  CALL DROPLET_H_MASS_H_HEAT_GAS(H_MASS,H_HEAT,D_AIR,K_AIR,CP_AIR,RHO_AIR,LENGTH,Y_DROP,Y_GAS,B_NUMBER,NU_FAC_GAS, &
+                                                 SH_FAC_GAS,RE_L,TMP_FILM,ZZ_GET,Z_INDEX)
                   H_WALL   = 0._EB
                   TMP_WALL = TMPA
                   ARRAY_CASE = 1
                ENDIF SOLID_OR_GAS_PHASE_2
-
+               IF (LPC%HEAT_TRANSFER_COEFFICIENT_GAS>=0._EB) H_HEAT=LPC%HEAT_TRANSFER_COEFFICIENT_GAS
+               IF (LPC%MASS_TRANSFER_COEFFICIENT>=0._EB) H_HEAT=LPC%MASS_TRANSFER_COEFFICIENT
                ! Build and solve implicit arrays for updating particle, gas, and wall temperatures
                ITMP = INT(TMP_DROP)
                H1 = H_SENS_Z(ITMP,Z_INDEX)+(TMP_DROP-REAL(ITMP,EB))*(H_SENS_Z(ITMP+1,Z_INDEX)-H_SENS_Z(ITMP,Z_INDEX))
                ITMP = INT(TMP_G)
                H2 = H_SENS_Z(ITMP,Z_INDEX)+(TMP_G-REAL(ITMP,EB))*(H_SENS_Z(ITMP+1,Z_INDEX)-H_SENS_Z(ITMP,Z_INDEX))
-               DTOP = DT_SUBSTEP/(2._EB*M_DROP*WGT*C_DROP)
-               DTOG = DT_SUBSTEP/(2._EB*M_GAS*CP)
-               DTGOG = DT_SUBSTEP*A_DROP*WGT*H_HEAT/(2._EB*M_GAS*CP)
-               DTGOP = DT_SUBSTEP*A_DROP*H_HEAT/(2._EB*M_DROP*C_DROP)
-               AGHRHO = A_DROP*WGT*H_MASS*RHO_AIR/(1._EB+0.5_EB*RVC*DT_SUBSTEP*A_DROP*WGT*H_MASS*RHO_AIR/RHO_G)
-               DADYDTHVHL=DTOG*AGHRHO*DYDT*(H1-H2)
-               DADYDTHV=DTOP*AGHRHO*DYDT*H_V
+
+               AGHRHO = A_DROP*H_MASS*RHO_AIR/(1._EB+0.5_EB*RVC*DT_SUBSTEP*A_DROP*WGT*H_MASS*RHO_AIR*(1._EB-Y_GAS)/RHO_G)
+
+               DTOG = DT_SUBSTEP*WGT/(M_GAS*CP)
+               DTGOG = 0.5_EB*DTOG*A_DROP*H_HEAT
+
+               DAHVHLDY = DTOG*AGHRHO*(H1-H2)*(Y_DROP-Y_GAS)
+               DADYDTHVHL=0.5_EB*DTOG*AGHRHO*(H1-H2)*DYDT
+
+               DTOP = DT_SUBSTEP/(M_DROP*C_DROP)
+               DTGOP = 0.5_EB*DTOP*A_DROP*H_HEAT
+
+               DADYHV = DTOP*AGHRHO*H_V*(Y_DROP-Y_GAS)
+               DADYDTHV=0.5_EB*DTOP*AGHRHO*DYDT*H_V
+
                SELECT CASE (ARRAY_CASE)
                   CASE(1) ! Gas Only
                      A_COL(1) = 1._EB+DTGOG
                      B_COL(1) = -(DTGOG+DADYDTHVHL)
                      A_COL(2) = -DTGOP
                      B_COL(2) = 1._EB+DTGOP+DADYDTHV
-                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+2._EB*DADYDTHVHL*(Y_DROP-Y_GAS)
-                     D_VEC(2) = DTGOP*TMP_G+(1-DTGOP+DADYDTHV)*TMP_DROP-2._EB*DADYDTHV*(Y_DROP-Y_GAS)+2._EB*DTOP*Q_DOT_RAD
+                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+DAHVHLDY
+                     D_VEC(2) = DTGOP*TMP_G+(1-DTGOP+DADYDTHV)*TMP_DROP-DADYHV+DTOP*Q_DOT_RAD
                      TMP_DROP_NEW = -(A_COL(2)*D_VEC(1)-A_COL(1)*D_VEC(2))/(A_COL(1)*B_COL(2)-B_COL(1)*A_COL(2))
                      TMP_G_NEW = (D_VEC(1)-B_COL(1)*TMP_DROP_NEW)/A_COL(1)
                      TMP_WALL_NEW = TMP_WALL
                   CASE(2) ! Const Temp Wall
-                     DTWOP = DT_SUBSTEP*A_DROP*WGT*H_WALL/(2._EB*M_DROP*WGT*C_DROP)
+
+                     DTWOP = 0.5_EB*DTOP*A_DROP*H_WALL
+
                      A_COL(1) = 1._EB+DTGOG
                      B_COL(1) = -(DTGOG+DADYDTHVHL)
                      A_COL(2) = -DTGOP
                      B_COL(2) = 1._EB+DTGOP+DTWOP+DADYDTHV
-                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+2._EB*DADYDTHVHL*(Y_DROP-Y_GAS)
-                     D_VEC(2) = DTGOP*TMP_G+(1-DTGOP-DTWOP+DADYDTHV)*TMP_DROP+2._EB*DTWOP*TMP_WALL-2._EB*DADYDTHV*(Y_DROP-Y_GAS)+&
-                                2._EB*DTOP*Q_DOT_RAD
+                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+DAHVHLDY
+                     D_VEC(2) = DTGOP*TMP_G+(1-DTGOP-DTWOP+DADYDTHV)*TMP_DROP+2._EB*DTWOP*TMP_WALL-DADYHV+DTOP*Q_DOT_RAD
                      TMP_DROP_NEW = -(A_COL(2)*D_VEC(1)-A_COL(1)*D_VEC(2))/(A_COL(1)*B_COL(2)-B_COL(1)*A_COL(2))
                      TMP_G_NEW = (D_VEC(1)-B_COL(1)*TMP_DROP_NEW)/A_COL(1)
                      TMP_WALL_NEW = TMP_WALL
                   CASE(3) ! 1D Wall
-                     DTWOP = DT_SUBSTEP*A_DROP*WGT*H_WALL/(2._EB*M_DROP*WGT*C_DROP)
+
+                     DTWOP = 0.5_EB*DTOP*A_DROP*H_WALL
                      DTWOW = DT_SUBSTEP*A_DROP*WGT*H_WALL/(2._EB*MCBAR)
+
                      A_COL(1) = 1._EB+DTGOG
                      B_COL(1) = -(DTGOG+DADYDTHVHL)
                      C_COL(1) = 0._EB
@@ -2609,16 +3215,15 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      A_COL(3) = -DTGOP
                      B_COL(3) = 1._EB+DTGOP+DTWOP+DADYDTHV
                      C_COL(3) = -DTWOP
-                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+2._EB*DADYDTHVHL*(Y_DROP-Y_GAS)
+                     D_VEC(1) = (1._EB-DTGOG)*TMP_G+(DTGOG-DADYDTHVHL)*TMP_DROP+DAHVHLDY
                      D_VEC(2) = DTWOW*TMP_DROP+(1._EB-DTWOW)*TMP_WALL
-                     D_VEC(3) = DTGOP*TMP_G+(1-DTGOP-DTWOP+DADYDTHV)*TMP_DROP+DTWOP*TMP_WALL-2._EB*DADYDTHV*(Y_DROP-Y_GAS)+&
-                                2._EB*DTOP*Q_DOT_RAD
+                     D_VEC(3) = DTGOP*TMP_G+(1-DTGOP-DTWOP+DADYDTHV)*TMP_DROP+DTWOP*TMP_WALL-DADYHV+DTOP*Q_DOT_RAD
                      TMP_DROP_NEW = (A_COL(1)*(D_VEC(2)*C_COL(3)-C_COL(2)*D_VEC(3))+D_VEC(1)*C_COL(2)*A_COL(3))/&
                                     (A_COL(1)*(B_COL(2)*C_COL(3)-C_COL(2)*B_COL(3))+B_COL(1)*C_COL(2)*A_COL(3))
-                     TMP_WALL_NEW = (D_VEC(3)-B_COL(2)*TMP_DROP_NEW)/C_COL(2)
+                     TMP_WALL_NEW = (D_VEC(2)-B_COL(2)*TMP_DROP_NEW)/C_COL(2)
                      TMP_G_NEW = (D_VEC(1)-B_COL(1)*TMP_DROP_NEW)/A_COL(1)
                END SELECT
-               M_VAP = MAX(0._EB,MIN(M_DROP, DT_SUBSTEP * AGHRHO/WGT * (Y_DROP-Y_GAS+0.5_EB*DYDT*(TMP_DROP_NEW-TMP_DROP))))
+               M_VAP = MAX(0._EB,MIN(M_DROP, DT_SUBSTEP * AGHRHO * (Y_DROP-Y_GAS+0.5_EB*DYDT*(TMP_DROP_NEW-TMP_DROP))))
 
                ! Compute the total amount of heat extracted from the gas, wall and radiative fields
 
@@ -2638,6 +3243,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      C_DROP2 = SUM(SS%C_P_L(MIN(ITMP,ITMP2):MAX(ITMP,ITMP2)))/REAL(ABS(ITMP2-ITMP)+1,EB)
                      TMP_DROP_NEW = TMP_DROP + (Q_TOT - M_VAP * H_V)/(C_DROP2 * (M_DROP - M_VAP))
                   ENDIF
+
                   IF (TMP_DROP_NEW<TMP_MELT) THEN
                      ! If the PARTICLE temperature drops below its freezing point, just reset it
                      TMP_DROP_NEW = TMP_MELT
@@ -2662,25 +3268,22 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                   TMP_DROP_NEW = T_BOIL_EFF
                ENDIF EVAP_ALL
 
-               IF (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0) TMP_WALL_NEW = TMP_WALL-Q_CON_WALL/MCBAR
+               IF (LP%ONE_D%IOR/=0 .AND. (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0)) TMP_WALL_NEW=TMP_WALL-Q_CON_WALL/MCBAR
                M_DROP = M_DROP - M_VAP
 
                ! Add fuel evaporation rate to running counter and adjust mass of evaporated fuel to account for different
                ! Heat of Combustion between fuel PARTICLE and gas
 
-               I_FUEL = 0
-               IF (N_REACTIONS>0) I_FUEL = REACTION(1)%FUEL_SMIX_INDEX
-
-               IF (LPC%Z_INDEX==I_FUEL .AND. I_FUEL>0) M_VAP = LPC%ADJUST_EVAPORATION*M_VAP
+               M_VAP = LPC%ADJUST_EVAPORATION*M_VAP
 
                M_GAS_NEW = M_GAS + WGT*M_VAP
                Y_GAS_NEW = (Y_GAS*M_GAS+WGT*M_VAP)/M_GAS_NEW
                ZZ_GET2 = M_GAS/M_GAS_NEW*ZZ_GET
                ZZ_GET2(Z_INDEX) = ZZ_GET2(Z_INDEX) + WGT*M_VAP/M_GAS_NEW
 
-               CALL INTERPOLATE1D_UNIFORM(LBOUND(SS%H_V,1),SS%H_V,TMP_DROP_NEW,H_V2)
-               DHOR     = 0.5_EB*(H_V2+H_V_B)*MW_DROP/R0
-               X_EQUIL  = MIN(1._EB,EXP(DHOR*(1._EB/T_BOIL_EFF-1._EB/TMP_DROP_NEW)))
+               T_BOIL_EFF = SS%TMP_V
+               CALL GET_EQUIL_DATA(MW_DROP,TMP_DROP,PBAR(KK,PRESSURE_ZONE(II,JJ,KK)),H_V2,H_V_A,T_BOIL_EFF,X_EQUIL,&
+                                   H_V_LOWER=LBOUND(SS%H_V,1),H_V_DATA=SS%H_V)
                Y_EQUIL  = X_EQUIL/(MW_RATIO + (1._EB-MW_RATIO)*X_EQUIL)
 
                ! Limit drop temperature decrease
@@ -2691,8 +3294,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      IF (DT_SUBSTEP <= 0.00001_EB*DT) THEN
                         DT_SUBSTEP = DT_SUBSTEP * 2.0_EB
                         WRITE(LU_ERR,'(A,I0,A,I0)') 'WARNING Y_EQ < Y_G_N. Mesh: ',NM,'Particle: ',IP
-                        !CALL SHUTDOWN('Numerical instability in particle energy transport, Y_EQUIL < Y_GAS_NEW')
-                        !RETURN
                      ELSE
                         CYCLE TIME_ITERATION_LOOP
                      ENDIF
@@ -2707,8 +3308,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                      IF (DT_SUBSTEP <= 0.00001_EB*DT) THEN
                         DT_SUBSTEP = DT_SUBSTEP * 2.0_EB
                         WRITE(LU_ERR,'(A,I0,A,I0)') 'WARNING Y_G_N > Y_EQ. Mesh: ',NM,'Particle: ',IP
-                        !CALL SHUTDOWN('Numerical instability in particle energy transport, Y_GAS_NEW > Y_EQUIL')
-                        !RETURN
                      ELSE
                      CYCLE TIME_ITERATION_LOOP
                      ENDIF
@@ -2762,8 +3361,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                   IF (DT_SUBSTEP <= 0.00001_EB*DT) THEN
                      DT_SUBSTEP = DT_SUBSTEP * 2.0_EB
                      WRITE(LU_ERR,'(A,I0,A,I0)') 'WARNING Delta TMP_G. Mesh: ',NM,' Particle: ',IP
-                     !CALL SHUTDOWN('Numerical instability in particle energy transport, TMP_G')
-                     !RETURN
                   ELSE
                      CYCLE TIME_ITERATION_LOOP
                   ENDIF
@@ -2777,8 +3374,6 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                   IF (DT_SUBSTEP <= 0.00001_EB*DT) THEN
                      DT_SUBSTEP = DT_SUBSTEP * 2.0_EB
                      WRITE(LU_ERR,'(A,I0,A,I0)') 'WARNING TMP_G_N < TMP_D_N. Mesh: ',NM,' Particle: ',IP
-                     !CALL SHUTDOWN('Numerical instability in particle energy transport, TMP_G_NEW < TMP_G')
-                     !RETURN
                   ELSE
                      CYCLE TIME_ITERATION_LOOP
                   ENDIF
@@ -2799,9 +3394,9 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                CALL GET_SENSIBLE_ENTHALPY(ZZ_GET,H_S,TMP_G)
                DELTA_H_G = H_S_B - H_S
                D_SOURCE(II,JJ,KK) = D_SOURCE(II,JJ,KK) + &
-                                    (MW_RATIO*M_VAP/M_GAS + (M_VAP*DELTA_H_G - Q_CON_GAS)/H_S_G_OLD) * WGT / DT
+                                    (MW_GAS/MW_DROP*M_VAP/M_GAS + (M_VAP*DELTA_H_G - Q_CON_GAS)/H_S_G_OLD) * WGT / DT
                M_DOT_PPP(II,JJ,KK,Z_INDEX) = M_DOT_PPP(II,JJ,KK,Z_INDEX) + M_VAP*RVC*WGT/DT
-               LP%M_DOT = M_VAP/DT
+               LP%M_DOT = LP%M_DOT + M_VAP/DT
 
                ! Add stability checks
 
@@ -2814,8 +3409,7 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                Q_DOT(2,NM) = Q_DOT(2,NM) + Q_RAD*WGT/DT                             ! Q_RADI
                Q_DOT(4,NM) = Q_DOT(4,NM) + Q_CON_WALL*WGT/DT                        ! Q_COND
 
-               IF (LPC%Z_INDEX==I_FUEL .AND. I_FUEL>0) M_DOT(2,NM) = M_DOT(2,NM) + WGT*M_VAP/DT/LPC%ADJUST_EVAPORATION
-               M_DOT(4,NM) = M_DOT(4,NM) + WGT*M_VAP/DT  ! Total mass loss rate
+               IF (LPC%Z_INDEX>0) M_DOT(LPC%Z_INDEX,NM) = M_DOT(LPC%Z_INDEX,NM) + WGT*M_VAP/DT/LPC%ADJUST_EVAPORATION
 
                ! Keep track of total mass evaporated in cell
 
@@ -2829,11 +3423,10 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
                LP%ONE_D%TMP_F  = TMP_DROP_NEW
                LP%MASS = M_DROP
 
-               ! Compute surface cooling
-
+               ! Sum convection and radiation for surfaces
                IF (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0) THEN
-                  ONE_D%LP_CPUA(LPC%ARRAY_INDEX) = ONE_D%LP_CPUA(LPC%ARRAY_INDEX) + OMRAF*WGT*Q_CON_WALL/(ONE_D%AREA*DT)
-                  ONE_D%Q_RAD_IN = (ONE_D%AREA*DT*ONE_D%Q_RAD_IN - WGT*DT*Q_DOT_RAD) / (ONE_D%AREA*DT)
+                  Q_CON_SUM = Q_CON_SUM + Q_CON_WALL
+                  Q_RAD_SUM = Q_RAD_SUM + Q_DOT_RAD*DT_SUBSTEP
                ENDIF
 
             ENDIF BOIL_ALL
@@ -2848,6 +3441,17 @@ SPECIES_LOOP: DO Z_INDEX = 1,N_TRACKED_SPECIES
          DT_SUBSTEP = MIN(DT-DT_SUM,DT_SUBSTEP * 1.5_EB)
 
       ENDDO TIME_ITERATION_LOOP
+
+      ! Compute surface cooling
+
+      IF (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0) THEN
+         R_DROP = LP%ONE_D%X(1)
+         A_DROP = WGT*PI*R_DROP**2
+         ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = ONE_D%LP_TEMP(LPC%ARRAY_INDEX) + A_DROP*0.5_EB*(TMP_DROP+TMP_DROP_NEW)
+         ONE_D%LP_CPUA(LPC%ARRAY_INDEX) = ONE_D%LP_CPUA(LPC%ARRAY_INDEX) + &
+                                          (1._EB-LPC%RUNNING_AVERAGE_FACTOR_WALL)*WGT*Q_CON_WALL/(ONE_D%AREA*DT)
+         ONE_D%Q_RAD_IN = (ONE_D%AREA*DT*ONE_D%Q_RAD_IN - WGT*DT*Q_DOT_RAD) / (ONE_D%AREA*DT)
+      ENDIF
 
    ENDDO PARTICLE_LOOP
 
@@ -2890,7 +3494,7 @@ SUM_PART_QUANTITIES: IF (N_LP_ARRAY_INDICES > 0) THEN
             SF => SURFACE(LPC%SURF_INDEX)
             R_DROP = MAXVAL(LP%ONE_D%X(0:SF%N_CELLS_MAX))
             SELECT CASE(SF%GEOMETRY)
-               CASE(SURF_CARTESIAN,SURF_BLOWING_PLATE)
+               CASE(SURF_CARTESIAN)
                   A_DROP = 2._EB*SF%LENGTH*SF%WIDTH
                CASE(SURF_CYLINDRICAL)
                   A_DROP = 2._EB*SF%LENGTH*R_DROP
@@ -2901,7 +3505,7 @@ SUM_PART_QUANTITIES: IF (N_LP_ARRAY_INDICES > 0) THEN
 
          ! Assign particle or PARTICLE mass to the grid cell if the particle/PARTICLE not on a surface
 
-         IF (LP%ONE_D%IOR==0) THEN
+         IF (LP%ONE_D%IOR==0 .OR. LPC%SOLID_PARTICLE) THEN
             DEN_ADD  =    LP%PWT*LP%MASS * RVC
             AREA_ADD =    LP%PWT*A_DROP * RVC
             DROP_DEN(II,JJ,KK)  = DROP_DEN(II,JJ,KK)  + DEN_ADD
@@ -2910,7 +3514,7 @@ SUM_PART_QUANTITIES: IF (N_LP_ARRAY_INDICES > 0) THEN
             DROP_AREA(II,JJ,KK) = DROP_AREA(II,JJ,KK) + AREA_ADD
          ENDIF
 
-         ! Compute surface density
+         ! Compute Mass Per Unit Area (MPUA) for a liquid droplet stuck to a solid surface
 
          IF (LP%ONE_D%IOR/=0 .AND. (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0)) THEN
             IF (LP%WALL_INDEX>0) THEN
@@ -2918,10 +3522,15 @@ SUM_PART_QUANTITIES: IF (N_LP_ARRAY_INDICES > 0) THEN
             ELSE
                ONE_D => CFACE(LP%CFACE_INDEX)%ONE_D
             ENDIF
-            R_DROP = LP%ONE_D%X(1)
-            FTPR   = FOTHPI * LP%ONE_D%MATL_COMP(1)%RHO(1)
-            M_DROP = FTPR*R_DROP**3
-            ONE_D%LP_MPUA(LPC%ARRAY_INDEX) = ONE_D%LP_MPUA(LPC%ARRAY_INDEX) + OMRAF*LP%PWT*M_DROP/ONE_D%AREA
+            IF (LPC%LIQUID_DROPLET) THEN
+               R_DROP = LP%ONE_D%X(1)
+               FTPR   = FOTHPI * LP%ONE_D%MATL_COMP(1)%RHO(1)
+               M_DROP = FTPR*R_DROP**3
+            ELSE
+               M_DROP = LP%MASS
+            ENDIF
+            ONE_D%LP_MPUA(LPC%ARRAY_INDEX) = ONE_D%LP_MPUA(LPC%ARRAY_INDEX) + &
+                                             (1._EB-LPC%RUNNING_AVERAGE_FACTOR_WALL)*LP%PWT*M_DROP/ONE_D%AREA
          ENDIF
 
       ENDDO PARTICLE_LOOP_2
@@ -2945,6 +3554,50 @@ SUM_PART_QUANTITIES: IF (N_LP_ARRAY_INDICES > 0) THEN
       WHERE (AVG_DROP_DEN(:,:,:,LPC%ARRAY_INDEX )<0.0001_EB .AND. ABS(DROP_DEN)<TWO_EPSILON_EB) &
          AVG_DROP_DEN(:,:,:,LPC%ARRAY_INDEX ) = 0.0_EB
 
+      ! Compute mean liquid droplet temperature (LP_TEMP) on the walls
+
+      IF (LPC%LIQUID_DROPLET) THEN
+
+         ! Initialize work array for storing droplet total area
+
+         DO IW = 1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
+            WALL(IW)%ONE_D%WORK2 = 0._EB  ! drop area
+         ENDDO
+         DO ICF = 1,N_CFACE_CELLS
+            CFACE(ICF)%ONE_D%WORK2 = 0._EB
+         ENDDO
+
+         PARTICLE_LOOP_3: DO IP=1,NLP
+
+            LP => LAGRANGIAN_PARTICLE(IP)
+            IF (LP%CLASS_INDEX /= N_LPC) CYCLE PARTICLE_LOOP_3
+
+            IF (LP%ONE_D%IOR/=0 .AND. (LP%WALL_INDEX>0 .OR. LP%CFACE_INDEX>0)) THEN
+               IF (LP%WALL_INDEX>0) THEN
+                  ONE_D => WALL(LP%WALL_INDEX)%ONE_D
+               ELSE
+                  ONE_D => CFACE(LP%CFACE_INDEX)%ONE_D
+               ENDIF
+               R_DROP = LP%ONE_D%X(1)
+               A_DROP = LP%PWT*PI*R_DROP**2
+               ONE_D%WORK2 = ONE_D%WORK2 + A_DROP
+            ENDIF
+
+         ENDDO PARTICLE_LOOP_3
+
+         DO IW = 1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
+            ONE_D => WALL(IW)%ONE_D
+            ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = ONE_D%LP_TEMP(LPC%ARRAY_INDEX)/(ONE_D%WORK2+TWO_EPSILON_EB)
+            ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = MAX(SPECIES(LPC%Y_INDEX)%TMP_MELT,ONE_D%LP_TEMP(LPC%ARRAY_INDEX))
+         ENDDO
+         DO ICF = 1,N_CFACE_CELLS
+            ONE_D => CFACE(ICF)%ONE_D
+            ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = ONE_D%LP_TEMP(LPC%ARRAY_INDEX)/(ONE_D%WORK2+TWO_EPSILON_EB)
+            ONE_D%LP_TEMP(LPC%ARRAY_INDEX) = MAX(SPECIES(LPC%Y_INDEX)%TMP_MELT,ONE_D%LP_TEMP(LPC%ARRAY_INDEX))
+         ENDDO
+
+      ENDIF
+
    ENDDO PART_CLASS_SUM_LOOP
 
 ENDIF SUM_PART_QUANTITIES
@@ -2956,23 +3609,40 @@ CALL REMOVE_PARTICLES(T,NM)
 END SUBROUTINE PARTICLE_MASS_ENERGY_TRANSFER
 
 
-SUBROUTINE PARTICLE_MOMENTUM_TRANSFER(NM)
+!> \brief Add PARTICLE momentum as a force term in momentum equation
+!> \param DT Current time step (s)
+!> \param NM Current mesh number
 
-! Add PARTICLE momentum as a force term in momentum equation
+SUBROUTINE PARTICLE_MOMENTUM_TRANSFER(DT,NM)
 
 USE TRAN, ONLY : GET_IJK
 INTEGER, INTENT(IN) :: NM
-REAL(EB), POINTER, DIMENSION(:,:,:) :: FVXS,FVYS,FVZS
-REAL(EB) :: XI,YJ,ZK,X_WGT,Y_WGT,Z_WGT
+REAL(EB), INTENT(IN) :: DT
+REAL(EB), POINTER, DIMENSION(:,:,:) :: FVXS,FVYS,FVZS,UU,VV,WW
+REAL(EB) :: XI,YJ,ZK,X_WGT,Y_WGT,Z_WGT,RDT,UODT,VODT,WODT
 INTEGER :: II,JJ,KK,I,J,K,IC,IW
 TYPE (LAGRANGIAN_PARTICLE_TYPE), POINTER :: LP
 TYPE (LAGRANGIAN_PARTICLE_CLASS_TYPE), POINTER :: LPC
+
+IF (MESHES(NM)%NLP==0) RETURN
 
 CALL POINT_TO_MESH(NM)
 
 FVXS => WORK1 ; FVXS = 0._EB
 FVYS => WORK2 ; FVYS = 0._EB
 FVZS => WORK3 ; FVZS = 0._EB
+
+RDT = 1._EB/DT
+
+IF (PREDICTOR) THEN
+   UU => U
+   VV => V
+   WW => W
+ELSE
+   UU => US
+   VV => VS
+   WW => WS
+ENDIF
 
 SUM_MOMENTUM_LOOP: DO I=1,NLP
    LP=>LAGRANGIAN_PARTICLE(I)
@@ -2999,27 +3669,20 @@ SUM_MOMENTUM_LOOP: DO I=1,NLP
    IW = WALL_INDEX(IC, 3)
    IF (WALL(IW)%BOUNDARY_TYPE/=SOLID_BOUNDARY) FVZS(II,JJ,KK)   = FVZS(II,JJ,KK)   -        Z_WGT *LP%ACCEL_Z
 
-   IF (LPC%PERIODIC_X) THEN
-      IF (II==1)    FVXS(IBAR,JJ,KK) = FVXS(IBAR,JJ,KK) - (1._EB-X_WGT)*LP%ACCEL_X
-      IF (II==IBAR) FVXS(0,JJ,KK)    = FVXS(0,JJ,KK)    -        X_WGT *LP%ACCEL_X
-   ENDIF
-   IF (LPC%PERIODIC_Y) THEN
-      IF (JJ==1)    FVYS(II,JBAR,KK) = FVYS(II,JBAR,KK) - (1._EB-Y_WGT)*LP%ACCEL_Y
-      IF (JJ==JBAR) FVYS(II,0,KK)    = FVYS(II,0,KK)    -        Y_WGT *LP%ACCEL_Y
-   ENDIF
-   IF (LPC%PERIODIC_Z) THEN
-      IF (KK==1)    FVZS(II,JJ,KBAR) = FVZS(II,JJ,KBAR) - (1._EB-Z_WGT)*LP%ACCEL_Z
-      IF (KK==KBAR) FVZS(II,JJ,0)    = FVZS(II,JJ,0)    -        Z_WGT *LP%ACCEL_Z
-   ENDIF
-
 ENDDO SUM_MOMENTUM_LOOP
+
+! Add summed particle accelerations to the momentum equation. Limit the value to plus/minus abs(u)/dt to prevent a sudden
+! change in gas direction.
 
 DO K=0,KBAR
    DO J=0,JBAR
       DO I=0,IBAR
-         FVX(I,J,K) = FVX(I,J,K) + FVXS(I,J,K)
-         FVY(I,J,K) = FVY(I,J,K) + FVYS(I,J,K)
-         FVZ(I,J,K) = FVZ(I,J,K) + FVZS(I,J,K)
+         UODT = ABS(UU(I,J,K)*RDT)
+         VODT = ABS(VV(I,J,K)*RDT)
+         WODT = ABS(WW(I,J,K)*RDT)
+         FVX(I,J,K) = FVX(I,J,K) + MIN(UODT,MAX(-UODT,FVXS(I,J,K)))
+         FVY(I,J,K) = FVY(I,J,K) + MIN(VODT,MAX(-VODT,FVYS(I,J,K)))
+         FVZ(I,J,K) = FVZ(I,J,K) + MIN(WODT,MAX(-WODT,FVZS(I,J,K)))
       ENDDO
    ENDDO
 ENDDO
@@ -3027,9 +3690,11 @@ ENDDO
 END SUBROUTINE PARTICLE_MOMENTUM_TRANSFER
 
 
-SUBROUTINE REMOVE_PARTICLES(T,NM)
+!> \brief Remove PARTICLEs that have left the current mesh (NM) or are no longer to be tracked
+!> \param T Current time (s)
+!> \param NM Current mesh number
 
-! Remove PARTICLEs that have left the current mesh (NM) or are no longer to be tracked
+SUBROUTINE REMOVE_PARTICLES(T,NM)
 
 INTEGER, INTENT(IN) :: NM
 INTEGER :: IKILL,IP
@@ -3037,7 +3702,9 @@ REAL(EB), INTENT(IN) :: T
 TYPE (LAGRANGIAN_PARTICLE_TYPE), POINTER :: LP
 TYPE (LAGRANGIAN_PARTICLE_CLASS_TYPE), POINTER :: LPC
 TYPE (SURFACE_TYPE), POINTER :: SF
+TYPE (MESH_TYPE), POINTER :: M,M2
 
+M => MESHES(NM)
 IKILL = 0
 
 PARTICLE_LOOP: DO IP=1,NLP
@@ -3046,14 +3713,17 @@ PARTICLE_LOOP: DO IP=1,NLP
 
       IF (IP>NLP-IKILL) EXIT PARTICLE_LOOP
 
-      LP  => MESHES(NM)%LAGRANGIAN_PARTICLE(IP)
+      LP  => M%LAGRANGIAN_PARTICLE(IP)
       LPC => LAGRANGIAN_PARTICLE_CLASS(LP%CLASS_INDEX)
       SF  => SURFACE(LPC%SURF_INDEX)
+
       ! Ignore HVAC particles
+
       IF (LPC%DUCT_PARTICLE) CYCLE PARTICLE_LOOP
+
       ! Remove particles that are too small
 
-      IF (LPC%SOLID_PARTICLE .AND. SF%THERMALLY_THICK .AND. LP%ONE_D%BURNAWAY) THEN
+      IF (LPC%SOLID_PARTICLE .AND. SF%THERMAL_BC_INDEX==THERMALLY_THICK .AND. LP%ONE_D%BURNAWAY) THEN
          CALL PARTICLE_ORPHANAGE
          CYCLE WEED_LOOP
       ENDIF
@@ -3087,31 +3757,30 @@ NLP = NLP - IKILL
 
 CONTAINS
 
+
+!> \brief Determine if the given particle is now in another mesh, and if so, assign it to the ORPHAN array.
+
 SUBROUTINE PARTICLE_ORPHANAGE
 
-! Determine if the given particle is now in another mesh, and if so, assign it to the ORPHAN array.
-
 USE MEMORY_FUNCTIONS, ONLY: REALLOCATE_STORAGE_ARRAYS
-INTEGER :: OM,NOM,N_NEW_STORAGE_SLOTS
-TYPE (MESH_TYPE), POINTER :: M=>NULL()
-TYPE (OMESH_TYPE), POINTER :: M2=>NULL()
+INTEGER :: MM,NOM,N_NEW_STORAGE_SLOTS,OLD_STORAGE_INDEX,OLD_CLASS_INDEX
+TYPE (OMESH_TYPE), POINTER :: OM
 
 ! Check to see if the particle has entered another mesh (NOM)
 
 NOM = 0
-SEARCH_LOOP: DO OM=1,NMESHES
-   IF (MESHES(NM)%OMESH(OM)%NIC_R==0) CYCLE SEARCH_LOOP
-   IF (EVACUATION_ONLY(OM)) CYCLE SEARCH_LOOP
-   M=>MESHES(OM)
-   IF (LP%X>M%XS .AND. LP%X<M%XF .AND.  LP%Y>M%YS .AND. LP%Y<M%YF .AND.  LP%Z>M%ZS .AND. LP%Z<M%ZF) THEN
-      NOM = OM
+SEARCH_LOOP: DO MM=1,MESHES(NM)%N_NEIGHBORING_MESHES
+   M2=>MESHES(M%NEIGHBORING_MESH(MM))
+   IF (EVACUATION_ONLY(M%NEIGHBORING_MESH(MM))) CYCLE SEARCH_LOOP
+   IF (LP%X>=M2%XS .AND. LP%X<=M2%XF .AND.  LP%Y>=M2%YS .AND. LP%Y<=M2%YF .AND.  LP%Z>=M2%ZS .AND. LP%Z<=M2%ZF) THEN
+      NOM = M%NEIGHBORING_MESH(MM)
       EXIT SEARCH_LOOP
    ENDIF
 ENDDO SEARCH_LOOP
 
 ! Don't remove particles that just cycle in a periodic domain
 
-IF (LPC%PERIODIC_X) THEN
+IF (PERIODIC_DOMAIN_X) THEN
    IF (LP%X>=XF_MAX) THEN
       LP%X = LP%X - (XF_MAX- XS_MIN)
       RETURN
@@ -3122,7 +3791,7 @@ IF (LPC%PERIODIC_X) THEN
    ENDIF
 ENDIF
 
-IF (LPC%PERIODIC_Y) THEN
+IF (PERIODIC_DOMAIN_Y) THEN
    IF (LP%Y>=YF_MAX) THEN
       LP%Y = LP%Y - (YF_MAX- YS_MIN)
       RETURN
@@ -3133,7 +3802,7 @@ IF (LPC%PERIODIC_Y) THEN
    ENDIF
 ENDIF
 
-IF (LPC%PERIODIC_Z) THEN
+IF (PERIODIC_DOMAIN_Z) THEN
    IF (LP%Z>=ZF_MAX) THEN
       LP%Z = LP%Z - (ZF_MAX- ZS_MIN)
       RETURN
@@ -3146,36 +3815,38 @@ ENDIF
 
 ! For particles that have entered another mesh (NOM), add them to the "orphanage"
 
-IF (NOM/=0) THEN
-   M2=>MESHES(NM)%OMESH(NOM)
-   M2%N_PART_ORPHANS(LP%CLASS_INDEX) = M2%N_PART_ORPHANS(LP%CLASS_INDEX) + 1
+IF (NOM/=0 .AND. NOM/=NM) THEN
+   OM=>MESHES(NM)%OMESH(NOM)
+   OM%N_PART_ORPHANS(LP%CLASS_INDEX) = OM%N_PART_ORPHANS(LP%CLASS_INDEX) + 1
 
-   IF (M2%N_PART_ORPHANS(LP%CLASS_INDEX)>M2%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%N_STORAGE_SLOTS) THEN
-      N_NEW_STORAGE_SLOTS = M2%N_PART_ORPHANS(LP%CLASS_INDEX) - M2%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%N_STORAGE_SLOTS
+   IF (OM%N_PART_ORPHANS(LP%CLASS_INDEX)>OM%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%N_STORAGE_SLOTS) THEN
+      N_NEW_STORAGE_SLOTS = OM%N_PART_ORPHANS(LP%CLASS_INDEX) - OM%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%N_STORAGE_SLOTS
       CALL REALLOCATE_STORAGE_ARRAYS(NM,2,LP%CLASS_INDEX,N_NEW_STORAGE_SLOTS,NOM)
    ENDIF
 
-   M2%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%REALS(:,M2%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
-      MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%REALS(:,LP%STORAGE_INDEX)
-   M2%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%INTEGERS(:,M2%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
-      MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%INTEGERS(:,LP%STORAGE_INDEX)
-   M2%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%LOGICALS(:,M2%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
-      MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%LOGICALS(:,LP%STORAGE_INDEX)
+   OM%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%REALS(:,OM%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
+      M%PARTICLE_STORAGE(LP%CLASS_INDEX)%REALS(:,LP%STORAGE_INDEX)
+   OM%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%INTEGERS(:,OM%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
+      M%PARTICLE_STORAGE(LP%CLASS_INDEX)%INTEGERS(:,LP%STORAGE_INDEX)
+   OM%ORPHAN_PARTICLE_STORAGE(LP%CLASS_INDEX)%LOGICALS(:,OM%N_PART_ORPHANS(LP%CLASS_INDEX)) = &
+      M%PARTICLE_STORAGE(LP%CLASS_INDEX)%LOGICALS(:,LP%STORAGE_INDEX)
 ENDIF
 
 ! Zero out storage for particle that is being removed
 
-MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%NEXT_AVAILABLE_SLOT = &
-   MIN(MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%NEXT_AVAILABLE_SLOT,LP%STORAGE_INDEX)
-MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%REALS(:,LP%STORAGE_INDEX)    = 0._EB
-MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%LOGICALS(:,LP%STORAGE_INDEX) = .FALSE.
-MESHES(NM)%PARTICLE_STORAGE(LP%CLASS_INDEX)%INTEGERS(:,LP%STORAGE_INDEX) = 0
+OLD_STORAGE_INDEX = LP%STORAGE_INDEX
+OLD_CLASS_INDEX   = LP%CLASS_INDEX
+M%PARTICLE_STORAGE(OLD_CLASS_INDEX)%NEXT_AVAILABLE_SLOT          = &
+   MIN(M%PARTICLE_STORAGE(OLD_CLASS_INDEX)%NEXT_AVAILABLE_SLOT,OLD_STORAGE_INDEX)
+M%PARTICLE_STORAGE(OLD_CLASS_INDEX)%REALS(:,OLD_STORAGE_INDEX)    = 0._EB
+M%PARTICLE_STORAGE(OLD_CLASS_INDEX)%LOGICALS(:,OLD_STORAGE_INDEX) = .FALSE.
+M%PARTICLE_STORAGE(OLD_CLASS_INDEX)%INTEGERS(:,OLD_STORAGE_INDEX) = 0
 
 ! Move particle at the end of the line into the vacated particle
 
 IF (IP<NLP-IKILL) THEN
-   MESHES(NM)%LAGRANGIAN_PARTICLE(IP) = MESHES(NM)%LAGRANGIAN_PARTICLE(NLP-IKILL)
-   MESHES(NM)%LAGRANGIAN_PARTICLE(IP)%ARRAY_INDEX = IP
+   M%LAGRANGIAN_PARTICLE(IP) = M%LAGRANGIAN_PARTICLE(NLP-IKILL)
+   M%LAGRANGIAN_PARTICLE(IP)%ARRAY_INDEX = IP
 ENDIF
 
 IKILL = IKILL + 1
@@ -3185,9 +3856,13 @@ END SUBROUTINE PARTICLE_ORPHANAGE
 END SUBROUTINE REMOVE_PARTICLES
 
 
-SUBROUTINE REMOVE_OLDEST_PARTICLE(NM,LPC_INDEX,NLP,LP_INDEX)
+!> \brief Remove the oldest particle of class LPC_INDEX and move particle NLP into its place.
+!> \param NM Current mesh number
+!> \param LPC_INDEX Particle class index
+!> \param NLP Index of the newest Lagrangian particle that is to replace the oldest
+!> \param LP_INDEX Index of the oldest particle that is replaced by the newest
 
-! Remove the oldest particle of class LPC_INDEX and move particle NLP into its place.
+SUBROUTINE REMOVE_OLDEST_PARTICLE(NM,LPC_INDEX,NLP,LP_INDEX)
 
 INTEGER, INTENT(IN) :: NM,LPC_INDEX,NLP
 INTEGER, INTENT(OUT) :: LP_INDEX
@@ -3220,17 +3895,6 @@ MESHES(NM)%LAGRANGIAN_PARTICLE(LP_INDEX) = MESHES(NM)%LAGRANGIAN_PARTICLE(NLP)
 MESHES(NM)%LAGRANGIAN_PARTICLE(LP_INDEX)%ARRAY_INDEX = LP_INDEX
 
 END SUBROUTINE REMOVE_OLDEST_PARTICLE
-
-
-REAL(EB) FUNCTION F_B(B)
-REAL(EB), INTENT(IN) :: B
-
-IF (B<=0._EB) THEN
-   F_B = 1._EB
-ELSE
-   F_B = (1._EB+B)**0.7_EB*LOG(1._EB+B)/B
-ENDIF
-END FUNCTION F_B
 
 
 END MODULE PART

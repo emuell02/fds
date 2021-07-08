@@ -9,24 +9,24 @@ repository = '../../Verification/Sprinklers_and_Sprays/';
 
 skip_case = 0;
 
-if ~exist([repository, 'terminal_velocity_dt_1_0.prt5'])
-    display(['Error: File ' [repository, 'terminal_velocity_dt_1_0.prt5'] ' does not exist. Skipping case.'])
+if ~exist([repository, 'terminal_velocity_dt_1_0_1.prt5'])
+    display(['Error: File ' [repository, 'terminal_velocity_dt_1_0_1.prt5'] ' does not exist. Skipping case.'])
     skip_case = 1;
 end
-if ~exist([repository, 'terminal_velocity_dt_0_1.prt5'])
-    display(['Error: File ' [repository, 'terminal_velocity_dt_0_1.prt5'] ' does not exist. Skipping case.'])
+if ~exist([repository, 'terminal_velocity_dt_0_1_1.prt5'])
+    display(['Error: File ' [repository, 'terminal_velocity_dt_0_1_1.prt5'] ' does not exist. Skipping case.'])
     skip_case = 1;
 end
-if ~exist([repository, 'terminal_velocity_dt_0_01.prt5'])
-    display(['Error: File ' [repository, 'terminal_velocity_dt_0_01.prt5'] ' does not exist. Skipping case.'])
+if ~exist([repository, 'terminal_velocity_dt_0_01_1.prt5'])
+    display(['Error: File ' [repository, 'terminal_velocity_dt_0_01_1.prt5'] ' does not exist. Skipping case.'])
     skip_case = 1;
 end
-if ~exist([repository, 'terminal_velocity_dt_0_001.prt5'])
-    display(['Error: File ' [repository, 'terminal_velocity_dt_0_001.prt5'] ' does not exist. Skipping case.'])
+if ~exist([repository, 'terminal_velocity_dt_0_001_1.prt5'])
+    display(['Error: File ' [repository, 'terminal_velocity_dt_0_001_01.prt5'] ' does not exist. Skipping case.'])
     skip_case = 1;
 end
-if ~exist([repository, 'terminal_velocity_dt_0_0001.prt5'])
-    display(['Error: File ' [repository, 'terminal_velocity_dt_0_0001.prt5'] ' does not exist. Skipping case.'])
+if ~exist([repository, 'terminal_velocity_dt_0_0001_1.prt5'])
+    display(['Error: File ' [repository, 'terminal_velocity_dt_0_0001_1.prt5'] ' does not exist. Skipping case.'])
     skip_case = 1;
 end
 
@@ -53,24 +53,24 @@ errvec = [];
 Linf = [];
 vtexact = sqrt(g / K);
 zexact = @(t) -log(cosh(sqrt(g * K) * t)) / K;
-[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_1_0.prt5'],'real*8');
+[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_1_0_1.prt5'],'real*8');
 dtvec = [1.0 0.1 0.01 0.001 0.0001];
 errvec(1) = abs(abs(QP(length(QP))) - vtexact);
 Linf(1) = norm(ZP' - zexact(STIME), Inf);
 %errtvec(1) = abs(ZP(find(abs(STIME - ttest) < eps, 1))' - zexact(ttest));
-[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_1.prt5'],'real*8');
+[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_1_1.prt5'],'real*8');
 errvec(2) = abs(abs(QP(length(QP))) - vtexact);
 Linf(2) = norm(ZP' - zexact(STIME), Inf);
 %errtvec(2) = abs(ZP(find(abs(STIME - ttest) < eps, 1))' - zexact(ttest));
-[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_01.prt5'],'real*8');
+[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_01_1.prt5'],'real*8');
 errvec(3) = abs(abs(QP(length(QP))) - vtexact);
 Linf(3) = norm(ZP' - zexact(STIME), Inf);
 %errtvec(3) = abs(ZP(find(abs(STIME - ttest) < eps, 1))' - zexact(ttest));
-[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_001.prt5'],'real*8');
+[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_001_1.prt5'],'real*8');
 errvec(4) = abs(abs(QP(length(QP))) - vtexact);
 Linf(4) = norm(ZP' - zexact(STIME), Inf);
 %errtvec(4) = abs(ZP(find(abs(STIME - ttest) < eps, 1))' - zexact(ttest));
-[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_0001.prt5'],'real*8');
+[STIME, XP, YP, ZP, QP] = read_prt5([repository, 'terminal_velocity_dt_0_0001_1.prt5'],'real*8');
 errvec(5) = abs(abs(QP(length(QP))) - vtexact);
 Linf(5) = norm(ZP' - zexact(STIME), Inf);
 %errtvec(6) = abs(ZP(find(abs(STIME - ttest) < eps, 1))' - zexact(ttest));
@@ -79,7 +79,7 @@ if errvec(5) > 1e-6
    display(['Matlab Warning: The velocity in the terminal_velocity* cases is out of tolerance.'])
 end
 
-if Linf(5) > 1e-6
+if Linf(5) > 1e-3
    display(['Matlab Warning: The position in the terminal_velocity* cases is out of tolerance.'])
 end
 
@@ -102,10 +102,8 @@ set(gca, 'FontSize', Label_Font_Size)
 
 xlabel('Time Step (s)', 'Interpreter', Font_Interpreter,'FontSize',Label_Font_Size)
 ylabel('Terminal Velocity Error (m/s)','FontSize',Label_Font_Size)
-h = legend(H, 'FDS', 'O({\it \deltat})',...
-    'O({\it \deltat}^2)', 'Location', 'Southeast');
-set(h,'Interpreter', Font_Interpreter)
-set(h,'FontSize', Key_Font_Size)
+h = legend(H, 'FDS', '$\mathcal{O}(\delta t)$',...
+    '$\mathcal{O}(\delta t^2)$', 'Location', 'East','Interpreter', 'LaTeX','FontSize', Key_Font_Size);
 
 set(gcf, 'Visible', Figure_Visibility);
 set(gcf, 'Units', Paper_Units);
@@ -126,8 +124,8 @@ set(gca,'Position',[Plot_X Plot_Y Plot_Width Plot_Height])
 
 H(1) = loglog(dtvec, Linf, '-*k');
 hold on
-H(2) = loglog(dtvec, 50 * dtvec, '--k');
-H(3) = loglog(dtvec, 5 * dtvec.^2, '-k');
+H(2) = loglog(dtvec, dtvec, '--k');
+H(3) = loglog(dtvec, dtvec.^2, '-k');
 hold off
 dto = dtvec((length(dtvec) - 1):length(dtvec));
 erro = Linf((length(Linf) - 1):length(Linf));
@@ -139,10 +137,8 @@ set(gca, 'FontSize', Label_Font_Size)
 
 xlabel('Time Step (s)', 'Interpreter', Font_Interpreter,'FontSize',Label_Font_Size)
 ylabel('Position Error (m)','FontSize',Label_Font_Size)
-h = legend(H, 'FDS', 'O({\it \deltat})',...
-    'O({\it \deltat}^2)', 'Location', 'Southeast');
-set(h,'Interpreter', Font_Interpreter)
-set(h,'FontSize', Key_Font_Size)
+h = legend(H, 'FDS', '$\mathcal{O}(\delta t)$',...
+    '$\mathcal{O}(\delta t^2)$', 'Location', 'Southeast','Interpreter','LaTeX','FontSize', Key_Font_Size);
 
 set(gcf, 'Visible', Figure_Visibility);
 set(gcf, 'Units', Paper_Units);

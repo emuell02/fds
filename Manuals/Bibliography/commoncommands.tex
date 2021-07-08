@@ -60,8 +60,6 @@
 \newcommand{\ct}{\tt\small} % eventually will be deprecated due to http://www.tex.ac.uk/cgi-bin/texfaq2html?label=2letterfontcmd
 \newcommand{\textct}[1]{\texttt{\small #1}}
 
-\usepackage{tocstyle} % Fix table of contents sections from overlapping section titles
-\usetocstyle{standard}
 \usepackage{siunitx}
 \sisetup{
     detect-all = true,
@@ -136,11 +134,11 @@
 \setlength{\parindent}{0.25in}
 \setlength{\oddsidemargin}{0.0in}
 \setlength{\evensidemargin}{0.0in}
-\setlength{\leftmargini}{\parindent} % Controls the indenting of the "bullets" in a list
-\setlength{\cftsecnumwidth}{0.45in}
-\setlength{\cftsubsecnumwidth}{0.5in}
-\setlength{\cftfignumwidth}{0.45in}
-\setlength{\cfttabnumwidth}{0.45in}
+\setlength{\leftmargini}{\parindent}        % Controls the indenting of the "bullets" in a list
+\cftsetindents{section}{.25in}{0.40in}      % Distance from left margin to section number; Width of section number and space before section title
+\cftsetindents{subsection}{0.65in}{0.60in}  % Distance from left margin to subsection number; Width of subsection number and space before subsection title
+\setlength{\cftfignumwidth}{0.45in}         % Width of figure number and space before figure caption in the list of figures
+\setlength{\cfttabnumwidth}{0.45in}         % Width of table number and space before table caption in the list of tables
 
 \newcommand{\authortitlesigs}
 {
@@ -182,10 +180,11 @@ Jason Floyd \\
 \small
 \begin{flushright}
 U.S. Department of Commerce \\
-{\em Wilbur L. Ross, Jr., Secretary} \\
+{\em Gina M. Raimondo, Secretary} \\
 \hspace{1in} \\
 National Institute of Standards and Technology \\
-{\em Walter Copan, NIST Director and Undersecretary of Commerce for Standards and Technology}
+% {\em James K. Olthoff, NIST Director and Undersecretary of Commerce for Standards and Technology}
+{\em James K. Olthoff, Performing the Non-Exclusive Functions and Duties of the Under Secretary of Commerce for Standards and Technology \& Director, National Institute of Standards and Technology}
 \end{flushright}
 }
 
@@ -349,6 +348,7 @@ http://dx.doi.org/10.6028/NIST.SP.#1
 \newcommand{\OTWO}{\text{\tiny \hbox{O}$_2$}}
 \newcommand{\NTWO}{\text{\tiny \hbox{N}$_2$}}
 \newcommand{\CO}{\text{\tiny \hbox{CO}}}
+\newcommand{\HCN}{\text{\tiny \hbox{HCN}}}
 \newcommand{\F}{\text{\tiny \hbox{F}}}
 \newcommand{\C}{\text{\tiny \hbox{C}}}
 \newcommand{\Hy}{\text{\tiny \hbox{H}}}
@@ -469,4 +469,4 @@ http://dx.doi.org/10.6028/NIST.SP.#1
 
 % Conditional to activate Unstructured Geometry text:
 \newif\ifcompgeom
-%\compgeomtrue
+\compgeomtrue

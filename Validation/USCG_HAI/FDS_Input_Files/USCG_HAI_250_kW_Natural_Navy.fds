@@ -12,7 +12,7 @@
 
 &SPEC ID='WATER VAPOR' /
 
-&REAC FUEL       = 'N-HEPTANE', AUTO_IGNITION_TEMPERATURE=-273., AIT_EXCLUSION_ZONE=3.4,3.6,1.8,2.2,0.8,1.1
+&REAC FUEL       = 'N-HEPTANE'
       FYI        = 'Heptane, C_7 H_16'
       CO_YIELD   = 0.006
       SOOT_YIELD = 0.015 /
@@ -48,7 +48,7 @@
 
 TC Trees
 
-&PROP ID='Sheathed Type K', BEAD_DIAMETER=0.0032 /
+&PROP ID='Sheathed Type K', DIAMETER=0.0032 /
 
 &DEVC XYZ=1.00,2.50,0.50, QUANTITY='THERMOCOUPLE', PROP_ID='Sheathed Type K', ID='TC 1-1' /
 &DEVC XYZ=1.00,2.50,1.00, QUANTITY='THERMOCOUPLE', PROP_ID='Sheathed Type K', ID='TC 1-2' /

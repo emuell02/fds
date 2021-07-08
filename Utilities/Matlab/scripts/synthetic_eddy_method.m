@@ -280,6 +280,156 @@ if urms_error>error_tolerance
     display(['Matlab Warning: sem_ramp_leddy_p2.fds urms_error = ',num2str(urms_error)])
 end
 
+% Monin-Obukhov profile at OPEN inflow boundary VELOCITY
+% ------------------------------------------------------
+figure
+set(gca,'Units',Plot_Units)
+set(gca,'Position',[Plot_X Plot_Y Plot_Width Plot_Height])
+
+if ~exist([datadir,'sem_open_wind_line.csv'])
+   display(['Error: File ',[datadir,'sem_open_wind_line.csv'],' does not exist. Skipping case.'])
+   return
+end
+
+% expected values
+E = importdata([datadir,'sem_open_wind_MO_profile.csv'],',',1);
+z_exp = E.data(:,find(strcmp(E.colheaders,'z')));
+u_exp = E.data(:,find(strcmp(E.colheaders,'u')));
+T_exp = E.data(:,find(strcmp(E.colheaders,'T')));
+
+M = importdata([datadir,'sem_open_wind_line.csv'],',',2);
+
+z_fds = M.data(:,find(strcmp(M.colheaders,'UMEAN-z')));
+u_fds = M.data(:,find(strcmp(M.colheaders,'UMEAN')));
+u_fds_rms = M.data(:,find(strcmp(M.colheaders,'URMS')));
+T_fds = M.data(:,find(strcmp(M.colheaders,'TMEAN')));
+T_fds_rms = M.data(:,find(strcmp(M.colheaders,'TRMS')));
+
+I = 0.1; % turbulence intensity (I), VEL_RMS=1 m/s, U_REF = 10 m/s from input file
+H(1)=plot(u_exp,z_exp,'k>'); hold on
+H(2)=plot((1+I)*u_exp,z_exp,'k:');
+plot((1-I)*u_exp,z_exp,'k:')
+
+H(3)=plot(u_fds,z_fds,'b-');
+H(4)=plot(u_fds+u_fds_rms,z_fds,'b--');
+plot(u_fds-u_fds_rms,z_fds,'b--')
+axis([0 12 0 10])
+xlabel('{\it u} (m/s)','FontName',Font_Name,'FontSize',Label_Font_Size)
+ylabel('{\it z} (m)','FontName',Font_Name,'FontSize',Label_Font_Size)
+
+set(gca,'FontName',Font_Name)
+set(gca,'FontSize',Label_Font_Size)
+
+h = legend(H,'Monin-Obukhov profile','Prescribed rms','FDS mean','FDS rms','location','northwest');
+set(h,'Interpreter',Font_Interpreter,'FontName',Font_Name,'FontSize',Label_Font_Size)
+
+Git_Filename = [datadir,'sem_open_wind_git.txt'];
+addverstr(gca,Git_Filename,'linear')
+
+set(gcf,'Visible',Figure_Visibility);
+set(gcf,'Units',Paper_Units);
+set(gcf,'PaperUnits',Paper_Units);
+set(gcf,'PaperSize',[Paper_Width Paper_Height]);
+set(gcf,'Position',[0 0 Paper_Width Paper_Height]);
+
+% print to pdf
+print(gcf,'-dpdf',[plotdir,'sem_open_wind_u_prof'])
+
+% compute error
+u_ref = 10;
+kk = find(z_exp<max(z_fds)&z_exp>min(z_fds));
+u_fds_int = interp1(z_fds,u_fds,z_exp(kk));
+umean_error = norm(u_exp(kk)-u_fds_int)/u_ref/length(u_fds_int);
+if umean_error>error_tolerance
+    display(['Matlab Warning: sem_open_wind.fds umean_error = ',num2str(umean_error)])
+end
+
+u_fds_rms_int = interp1(z_fds,u_fds_rms,z_exp(kk));
+urms_error = norm(u_fds_int+u_fds_rms_int-(1+I)*u_exp(kk))/u_ref/length(u_fds_rms_int);
+if urms_error>error_tolerance
+    display(['Matlab Warning: sem_open_wind.fds urms_error = ',num2str(urms_error)])
+end
+
+% Monin-Obukhov profile at OPEN inflow boundary TEMPERATURE
+% ---------------------------------------------------------
+figure
+set(gca,'Units',Plot_Units)
+set(gca,'Position',[Plot_X Plot_Y Plot_Width Plot_Height])
+
+H(1)=plot(T_exp,z_exp,'ko'); hold on
+H(2)=plot(T_fds,z_fds,'r-');
+xlabel('{\it T} (C)','FontName',Font_Name,'FontSize',Label_Font_Size)
+ylabel('{\it z} (m)','FontName',Font_Name,'FontSize',Label_Font_Size)
+
+set(gca,'FontName',Font_Name)
+set(gca,'FontSize',Label_Font_Size)
+
+h = legend(H(1:2),'Monin-Obukhov profile','FDS mean','location','northeast');
+set(h,'Interpreter',Font_Interpreter,'FontName',Font_Name,'FontSize',Label_Font_Size)
+
+Git_Filename = [datadir,'sem_open_wind_git.txt'];
+addverstr(gca,Git_Filename,'linear')
+
+set(gcf,'Visible',Figure_Visibility);
+set(gcf,'Units',Paper_Units);
+set(gcf,'PaperUnits',Paper_Units);
+set(gcf,'PaperSize',[Paper_Width Paper_Height]);
+set(gcf,'Position',[0 0 Paper_Width Paper_Height]);
+
+% print to pdf
+print(gcf,'-dpdf',[plotdir,'sem_open_wind_T_prof'])
+
+% compute error
+T_ref = 20+273;
+kk = find(z_exp<max(z_fds)&z_exp>min(z_fds));
+T_fds_int = interp1(z_fds,T_fds,z_exp(kk));
+Tmean_error = norm(T_exp(kk)-T_fds_int)/T_ref/length(T_fds_int);
+if Tmean_error>error_tolerance
+    display(['Matlab Warning: sem_open_wind.fds Tmean_error = ',num2str(Tmean_error)])
+end
+
+% Monin-Obukhov length scale from ABL_WALL_MODEL
+% ----------------------------------------------
+figure
+set(gca,'Units',Plot_Units)
+set(gca,'Position',[Plot_X Plot_Y Plot_Width Plot_Height])
+
+M = importdata([datadir,'sem_open_wind_devc.csv'],',',2);
+
+t = M.data(:,find(strcmp(M.colheaders,'Time')));
+L_MO_fds = M.data(:,find(strcmp(M.colheaders,'"L_MO_MEAN"')));
+
+L_MO = -667;
+L_MO_exp = -667*ones(length(t),1);
+H(1)=plot(t,L_MO_exp,'k-'); hold on
+H(2)=plot(t,L_MO_fds,'k--');
+xlabel('time (s)','FontName',Font_Name,'FontSize',Label_Font_Size)
+ylabel('{\it L} (m)','FontName',Font_Name,'FontSize',Label_Font_Size)
+
+set(gca,'FontName',Font_Name)
+set(gca,'FontSize',Label_Font_Size)
+
+h = legend(H(1:2),'Prescribed MO length','FDS predicted MO length','location','southeast');
+set(h,'Interpreter',Font_Interpreter,'FontName',Font_Name,'FontSize',Label_Font_Size)
+
+Git_Filename = [datadir,'sem_open_wind_git.txt'];
+addverstr(gca,Git_Filename,'linear')
+
+set(gcf,'Visible',Figure_Visibility);
+set(gcf,'Units',Paper_Units);
+set(gcf,'PaperUnits',Paper_Units);
+set(gcf,'PaperSize',[Paper_Width Paper_Height]);
+set(gcf,'Position',[0 0 Paper_Width Paper_Height]);
+
+% print to pdf
+print(gcf,'-dpdf',[plotdir,'sem_open_wind_LMO'])
+
+% compute error
+ii = round(length(t)/2):length(t);
+LMO_error = norm(L_MO_exp(ii)-L_MO_fds(ii))/abs(L_MO)/length(ii);
+if LMO_error>0.1
+    display(['Matlab Warning: sem_open_wind.fds LMO_error = ',num2str(LMO_error)])
+end
 
 
 

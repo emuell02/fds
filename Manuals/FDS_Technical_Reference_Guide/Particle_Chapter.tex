@@ -21,6 +21,7 @@ The particle acceleration is given by
 \be
     \frac{\d \bu_{\rm p}}{\d t} = \bg - \ha \frac{\rho\,C_{\rm d} \, A_{\rm p,c}}{m_{\rm p}} \,
     (\bu_{\rm p}-\bu) |\bu_{\rm p}-\bu|
+    \label{part_accel}
 \ee
 The particle position, $\bx_{\rm p}$, is determined from the equation
 \be
@@ -89,9 +90,9 @@ where $\RE$ is the single particle Reynolds number, $L$ is the distance between 
   W = 1 - \frac{C_{\rm d,0}}{2} \left[ 1 - \exp \left( - \frac{\RE}{16}
   \frac{1}{\left( L / D - 1 / 2 \right)} \right) \right]. \label{eq:Wake-Vel}
 \ee
-This model assumes that the spheres are traveling directly in-line with each other. As such, this provides an upper bound for the strength of the aerodynamic interactions between two particles of the same size. The average separation distance $L/D$ between particle centers is calculated from the local particle volume fraction and local average particle diameter $\bar{D}$ via
+This model assumes that the spheres are traveling directly in-line with each other. As such, this provides an upper bound for the strength of the aerodynamic interactions between two particles of the same size. The average separation distance $L/D$ between particle centers is calculated from the local particle volume fraction, $\alpha$, as follows:
 \be
-  L/D = \bar{D} \left(\pi/6\alpha \right)^{\frac{1}{3}}.
+  L/D = \left(\pi/6\alpha \right)^{\frac{1}{3}}.
 \ee
 This simple approximation assumes that particles are uniformly distributed in each computational cell~\cite{Bhattacharyya2008}.
 
@@ -105,7 +106,6 @@ which is 78\% of that for an isolated spherical particle.
 
 An alternative approach to drag reduction was provided by Prahl et al.~\cite{Prahl:1} who studied the interaction between two solid spheres in steady or pulsating flow by detailed numerical simulations. According to their study, the above equation underestimates the drag reduction significantly at small drop-to-drop distances. The inflow pulsations were found to reduce the effect of the drag reduction. At large distances, the two results are similar, the Ram\'{\i}rez-Mu\~{n}oz correlation showing more drag reduction. This is not surprising since the velocity profile of a fully developed axi-symmetric wake behind an axi-symmetric body is used in developing the drag reduction correction in Eqs.~\ref{eq:dragredfact} and \ref{eq:Wake-Vel}. At short distances, the wake is not fully developed and the assumption does not hold.
 
-\newpage
 \section{Liquid Droplet Size Distribution}
 
 The cumulative volume distribution for a liquid spray is represented by a combination of log-normal and Rosin-Rammler distributions~\cite{Chan:1}:
@@ -167,14 +167,14 @@ where ${\cal U}(0,1)$ is a uniformly distributed real number between 0 and 1 and
     The mass and heat transferred from each droplet will be multiplied by the weighting factor $C$.
 \end{enumerate}
 
-\newpage
+
 \section{Spray Initialization}
 
 The droplets are introduced into the simulation along a spherical surface whose diameter is a specified stand-off distance from the nozzle orifice. It is assumed that the droplets have fully atomized by this stage. The longitude of the initial droplet position, $0\le \theta < 2 \pi$, is randomly chosen from a uniform distribution. The latitude, $0 \le \phi < \pi$, is randomly selected from the following distribution:
 \begin{equation}
-  f(\phi) = \exp \left[ - \beta \left( \frac{\phi - \phi_{\min}}{\phi_{\max} - \phi_{\min}} \right)^2 \right]
+  f(\phi) = \exp \left[ - \beta \left( \frac{\phi - \mu}{\phi_{\max} - \phi_{\min}} \right)^2 \right]
 \end{equation}
-Note that $\phi=0$ is the south pole of the sphere. The spread parameter, $\beta$, is 5 by default. All the droplets are given the same initial speed in the direction of the surface normal.
+Note that $\phi=0$ is the south pole of the sphere. The parameter $\phi_{\min}=0$ by default. The parameter $\mu$ controls the location of the peak of the distribution and may be used to approximate a hollow cone nozzle.  By default, $\mu=\phi_{\min}=0$.  However, if $\phi_{\min}>0$, unless otherwise specified, $\mu$ is set to the average of $\phi_{\min}$ and $\phi_{\max}$.  The spread parameter, $\beta$, is 5 by default.  If $\beta=0$ the distribution is uniform.  As $\beta$ becomes large, the distribution approximates a delta function at $\mu$.  All the droplets are given the same initial speed in the direction of the surface normal.
 
 
 
@@ -184,12 +184,17 @@ Liquid droplets can represent either discrete airborne spheres or elements of th
 
 Over the course of a time step of the gas phase solver, the droplets in a given grid cell evaporate to form the gas species $\alpha$. The evaporation rate is a function of the liquid equilibrium vapor mass fraction, $Y_{\rm \alpha,\ell}$, the local gas phase vapor mass fraction, $Y_{\rm \alpha,g}$, the (assumed uniform) droplet temperature, $T_{\rm p}$, and the local gas temperature, $T_{\rm g}$. The subscript ``g'' refers to the average of the quantity in the cell occupied by the droplet. The subscript ``p'' refers to the liquid droplet. If the droplet is attached to a solid, $T_{\rm s}$ is the surface temperature. The mass and energy transfer between the gas and the liquid can be described by the following set of equations~\cite{Cheremisinoff:1}
 \begin{align}
-\frac{\d m_{\rm p}}{\d t} & = - A_{\rm p,s} \, h_{\rm m} \, \rho_{\rm g} \, (Y_{\alpha,\ell} - Y_{\rm \alpha, g}) \label{droplet_mass} \\[0.2in]
-\rho_{\rm g} V \frac{\d Y_{\rm \alpha, g}}{\d t} & = -\frac{\d m_{\rm p}}{\d t}  \label{droplet_gas_fraction} \\[0.2in]
-\frac{\d T_{\rm p}}{\d t} & = \frac{1}{m_{\rm p} \, c_{\rm p}}  \left[ \dq_{\rm r} + A_{\rm p,s} \, h  \, (T_{\rm g}-T_{\rm p}) + \frac{\d m_{\rm p}}{\d t} \; h_{\rm v} \right]  \label{droplet_temp}  \\[0.2in]
-\frac{\d T_{\rm g}}{\d t} & = \frac{1}{m_{\rm g} \, c_{\rm g}}  \left[A_{\rm p,s} \, h  \, (T_{\rm p}-T_{\rm g}) - \frac{\d m_{\rm p}}{\d t} \; (h_{\rm v}+h_{\rm l}) \right]  \label{droplet_gas_temp}
+\frac{\d m_{\rm p}}{\d t} & = - A_{\rm p,s} \, h_{\rm m} \, \rho_{\rm f} \, (Y_{\alpha,\ell} - Y_{\rm \alpha, g}) \label{droplet_mass} \\[0.2in]
+\rho_{\rm g} V \frac{\d Y_{\rm \alpha, g}}{\d t} & = -\left(1-Y_{\rm \alpha, g}\right)\frac{\d m_{\rm p}}{\d t}  \label{droplet_gas_fraction} \\[0.2in]
+\frac{\d T_{\rm p}}{\d t} & = \frac{1}{m_{\rm p} \, c_{\rm p}}  \left[ \dq_{\rm r} + A_{\rm p,s} \, h_{\rm g}  \, (T_{\rm g}-T_{\rm p}) + A_{\rm p,s} \, h_{\rm w}  \, (T_{\rm w}-T_{\rm p}) + \frac{\d m_{\rm p}}{\d t} \; h_{\rm v} \right]  \label{droplet_temp}  \\[0.2in]
+\frac{\d T_{\rm g}}{\d t} & = \frac{1}{m_{\rm g} \, c_{\rm g}}  \left[A_{\rm p,s} \, h_{\rm g}  \, (T_{\rm p}-T_{\rm g}) - \frac{\d m_{\rm p}}{\d t} \; (h_{\rm \alpha,p}-h_{\rm \alpha,g}) \right]  \label{droplet_gas_temp}   \\[0.2in]
+\frac{\d T_{\rm w}}{\d t} & = -\frac{A_{\rm p,s} \, h_{\rm w}}{m_{\rm w} \, c_{\rm w}} (T_{\rm w}-T_{\rm p})  \label{droplet_solid_temp}
 \end{align}
-The droplet is taken to be a pure liquid of species $\alpha$ (usually, either water or fuel).  Here, $m_{\rm p}$ is the mass of the droplet (or that fraction of the surface film associated with the formerly airborne droplet), $A_{\rm p,s}$ is the surface area of the liquid droplet, $h_{\rm m}$ is the mass transfer coefficient to be discussed below, $\rho_{\rm g}$ is the gas density, $c_{\rm p}$ is the liquid specific heat, $c_{\rm g}$ is the gas specific heat, $h$ is the heat transfer coefficient between the droplet and the gas, $\dq_{\rm r}$ is the rate of radiative heating of the droplet (see Eq.~(\ref{eq:qr})), $h_{\rm l}$ is the liquid specific enthalpy, and $h_{\rm v}$ is the latent heat of vaporization of the liquid. If the droplet were located on a wall surface there would be a fourth equation for the wall temperature. The vapor mass fraction of the gas, $Y_{\rm \alpha,g}$, is obtained from the gas phase mass transport equations, and the liquid equilibrium vapor mass fraction is obtained from the Clausius-Clapeyron equation
+The droplet is taken to be a pure liquid of species $\alpha$ (usually, either water or fuel).  Here, $m_{\rm p}$ is the mass of the droplet (or that fraction of the surface film associated with the formerly airborne droplet), $A_{\rm p,s}$ is the surface area of the liquid droplet, $h_{\rm m}$ is the mass transfer coefficient to be discussed below, $\rho_{\rm g}$ is the gas density, $\rho_{\rm f}$ is the particle film density, $c_{\rm p}$ is the liquid specific heat, $c_{\rm g}$ is the gas specific heat, $h_{\rm g}$ is the heat transfer coefficient between the droplet and the gas, $\dq_{\rm r}$ is the rate of radiative heating of the droplet (see Eq.~(\ref{eq:qr})), $h_{\rm \alpha,p}$ is the vapor specific enthalpy at the particle temperature, and $h_{\rm \alpha,g}$ is the vapor specific enthalpy at the gas temperature.
+
+Equation (\ref{droplet_solid_temp}) is only used if the droplet were located on a wall surface in which case the droplet is treated as film with half its area exposed to gas and half its area exposed to solid. In that equation $h_{\rm w}$ is the heat transfer coefficient between the droplet and the solid, $m_{\rm w}$ is the mass of the first node of the solid, and $c_{\rm w}$ is the solid specific heat.
+
+The vapor mass fraction of the gas, $Y_{\rm \alpha,g}$, is obtained from the gas phase mass transport equations, and the liquid equilibrium vapor mass fraction is obtained from the Clausius-Clapeyron equation
 \be X_{\rm \alpha,\ell} = \exp \left[ \frac{h_{\rm v} \, W_{\alpha}}R
       \left( \frac{1}{T_{\rm b}}-\frac{1}{T_{\rm p}} \right) \right]  \quad ; \quad
       Y_{\rm \alpha,\ell} = \frac{X_{\rm \alpha,\ell}}{X_{\rm \alpha,\ell} \, (1-W_{\rm a}/W_{\alpha}) + W_{\rm a}/W_{\alpha}}  \label{clausius_clapeyron} \ee
@@ -198,7 +203,7 @@ where $X_{\alpha,\ell}$ is the equilibrium vapor {\em volume} fraction, $W_{\alp
 Mass and heat transfer between liquid and gas are described with analogous empirical correlations. The mass transfer coefficient, $h_{\rm m}$, is described by the empirical relationships~\cite{Sazhin:2006}:
 \be
    h_{\rm m} = \frac{\SH \, D_{\rm \ell g}}{L} \, \frac{B_M}{Y_{\alpha,\ell} - Y_{\rm \alpha, g}}
-\ee
+\label{eq:h_m_vap}\ee
 \be
    \SH = \frac{\ln(1+B_M)}{B_M} {\SH}_0
 \ee
@@ -210,7 +215,7 @@ Mass and heat transfer between liquid and gas are described with analogous empir
 \ee
 \be
    B_M = \frac{Y_{\alpha,\ell} - Y_{\rm \alpha, g}}{1-Y_{\alpha,\ell}}
-\ee
+\label{eq:B_M_vap}\ee
 where $B_M$ is the Spalding mass transfer number \cite{Spalding:1}, $\SH_0$ is the low mass flux Sherwood number, $\SH$ is the Sherwood number with blowing, $D_{\rm \ell g}$ is the binary diffusion coefficient between the liquid vapor and the surrounding gas (usually assumed air), $L$ is a length scale equal to either the droplet diameter or 1~m for a surface film, $\RE_D$ is the Reynolds number of the droplet (based on the diameter, $D$, and the relative air-droplet velocity), $\RE_L$ is the Reynolds number based on the length scale $L$, and $\SC$ is the Schmidt number ($\nu/D_{\rm \ell g}$, assumed 0.6 for all cases).  Note that the mass transfer coefficient, $h_m$, is formulated so that the mass flux model given by Eq.~(\ref{droplet_mass}) recovers Eq.~(108) of Sazhin \cite{Sazhin:2006} but still works within the implicit time update.
 
 An analogous relationship exists for the heat transfer coefficient~\cite{Sazhin:2006}:
@@ -229,25 +234,9 @@ An analogous relationship exists for the heat transfer coefficient~\cite{Sazhin:
 where $\NU_0$ is the low mass flux Nusselt number, $\NU$ is the Nusselt number with blowing, $k$ is the thermal conductivity of the gas, and $\PR$ is the Prandtl number (assumed 0.7 for all cases). In cases where the droplet is actually a portion of the liquid film attached to a solid surface, half of the droplet mass is heated or cooled by the solid surface and half is heated or cooled by the gas.
 
 The exchange of mass and energy between liquid droplets and the surrounding gases (or solid surfaces) is computed droplet by droplet. After the temperature of each droplet is computed, the
-appropriate amount of vaporized liquid is added to the given mesh cell, and the cell gas temperature is reduced slightly based on the energy lost to the droplet.
+appropriate amount of vaporized liquid is defined as a source term for the given mesh cell, any heat transfer to a solid is stored as a convective term, and the net effect of heat transfer and mass addition to the gas is defined as a divergence. The mass and divergence terms are discussed in the sections that follow.
 
-Equation~(\ref{droplet_mass}) through Equation~(\ref{droplet_gas_temp}) are solved semi-implicitly over the course of a gas phase time step as follows. The equilibrium vapor mass fraction, $Y_{\rm \alpha,\ell}^n$, is computed using $T_{\rm p}^n$ via Eq.~(\ref{clausius_clapeyron}), and its value at the next time step is approximated via
-\be
-Y_{\rm \alpha,\ell}^{n+1} \approx Y_{\rm \alpha,\ell}^n + \left( \frac{\d Y_{\rm \alpha,\ell}}{\d T_{\rm p}} \right)^n \; \Big( T_{\rm p}^{n+1}-T_{\rm p}^n \Big)
-\ee
-where the derivative of $Y_{\rm \alpha,\ell}$ with respect to temperature is obtained via the chain rule:
-\be
-\frac{\d Y_{\rm \alpha,\ell}}{\d T_{\rm p}} = \frac{\d Y_{\rm \alpha,\ell}}{\d X_{\rm \alpha,\ell}} \, \frac{\d X_{\rm \alpha,\ell}}{\d T_{\rm p}}  = \frac{W_{\rm a}/W_{\alpha}}{ (X_{\rm \alpha,\ell} (1-W_{\rm a}/W_{\alpha}) + W_{\rm a}/W_{\alpha})^2 } \;
-\frac{h_{\rm v} W_{\alpha}}{R \, T_{\rm p}^2} \, \exp \left[ \frac{h_{\rm v} \, W_{\alpha}}R \left( \frac{1}{T_{\rm b}}-\frac{1}{T_{\rm p}} \right) \right]
-\ee
-
-Equation~(\ref{droplet_mass}) and Equation~(\ref{droplet_gas_fraction}) are combined with the above result to yield:
-\be
-   \frac{\d m_{\rm p}}{\d t} = - \frac{A h_{\rm m} \rho_{\rm g}}{2} \frac{2 Y_{\rm \alpha,\ell}^n + \frac{\d Y_{\rm \alpha,\ell}}{\d T_{\rm p}} \Big( T_{\rm p}^{n+1}-T_{\rm p}^n \Big)-2 Y_{\rm \alpha, g}^n} {1+\frac{\Delta t^n A h_{\rm m}}{2 V}} \label{droplet_mass_2}
-\ee
-
-This can then be substituted into Equation~(\ref{droplet_temp}) and Equation~(\ref{droplet_gas_temp}) to yield a pair of linear equations for the droplet and gas temperature. If a wall is present, then there will be a third equation for the wall temperature. Once the new temperatures are known, the new droplet temperature can be used in Equation~(\ref{droplet_mass_2}) to determine the amount of evaporated liquid.
-
+Equation~(\ref{droplet_mass}) through Equation~(\ref{droplet_gas_temp}) are solved as a set of coupled implicit equations over the course of a gas phase time step. Details on this solution process are given in Appendix~\ref{app_drop_evaporation}.
 
 \subsection{Filtered Volumetric Source Terms}
 
@@ -264,6 +253,7 @@ where $n$ represents the sub-time step in the integration of the droplet mass an
 In practice, the filtered mass and energy source term contributions to the velocity divergence constraint are collected in a single term denoted {\ct D\_SOURCE} within the code,
 \begin{equation}
 D_{\si{\tiny SOURCE}} = \frac{1}{\rho} \sum_\alpha \frac{\overline{W}}{W_\alpha} \, \dot{m}_{{\rm b},\alpha}^{\ppp} + \frac{1}{\rho c_p T} \left( \dot{q}_{\rm b}^{\ppp} - \sum_\alpha \dot{m}_{{\rm b},\alpha}^{\ppp} \, \int_{T_{\rm b}}^T c_{p,\alpha} \d T'  \right)
+\label{eq:D_SOURCE_vap}
 \end{equation}
 which is embedded in Eq.~(\ref{eqn_fdsD1}).
 
@@ -326,9 +316,9 @@ It is assumed that the particles interact with the surrounding gas via an additi
 \ee
 where the summation is over all the particles within the cell. The effective absorption coefficient for a single particle is given by
 \be
-   \kappa_{\rm p} = \frac{C_{\rm s} \, A}{\dx \, \dy \, \dz}
+   \kappa_{\rm p} = \frac{A_{\rm p}}{4 \, \dx \, \dy \, \dz}
 \ee
-where $C_{\rm s}$ is the shape factor (ratio of cross sectional area to surface area) and $A$ is the surface area of the particle and $\dx \, \dy \, \dz$ is the volume of the cell. The net radiative heat flux onto the surface of the particle is
+where $A_{\rm p}$ is the surface area of the particle and $\dx \, \dy \, \dz$ is the volume of the cell. The net radiative heat flux onto the surface of the particle is
 \be
    \dq_{\rm r,p}'' = \epsilon \left( \frac{U_{ijk}}{4} - \sigma T_{\rm p}^4 \right)
 \ee
@@ -360,6 +350,8 @@ This force term essentially spreads the pressure drop over the width of a grid c
 
 \section{Turbulent Dispersion}
 
+\subsection{Massless Tracers}
+
 The effect of subgrid-scale turbulent fluid motion on the velocity and position of a Lagrangian particle may be accounted for using a random walk model \cite{Raman:CF}.  The position of a tracer particle obeys the stochastic differential equation
 \be
 \mbox{d}\mathbf{x}^* = \left[ \tilde{\mathbf{u}} + \frac{1}{\bar{\rho}}\nabla (\bar{\rho}\,D_t) \right] \,\mbox{d}t + \sqrt{2D_t} \,\mbox{d}\mbox{\textbf{W}}
@@ -367,3 +359,14 @@ The effect of subgrid-scale turbulent fluid motion on the velocity and position 
 where $\mathbf{x}^*$ denotes the particle position (an asterisk signifies a particle property), $\tilde{\mathbf{u}}$ is the resolved LES velocity, $D_t$ is the turbulent diffusivity (taken from an eddy viscosity model, for example), and $\mbox{\textbf{W}}$ is an independent Wiener process.  Notice that if no turbulent diffusion exists, the particle follows the resolved flow.  The term added to the resolved velocity accounts for the deterministic mean drift and the random walk term (Wiener process) accounts for the reorientation effect of unresolved turbulent motion.
 
 For those unfamiliar with stochastic differential equations, the Wiener process may be understood numerically as $\mbox{dW}(t) = (\delta t)^{1/2} \, \zeta(t)$ in the limit $\delta t \rightarrow 0$, where $\zeta(t)$ is an independent standardized Gaussian random variable \cite{Pope:2000}.  In FDS, $\zeta(t)$ are generated from a Box-Muller transform \cite{Box-Muller:1958}.
+
+\subsection{Massive Particles}
+
+For massive particles, a random walk model is not used.  Instead, the fluid velocity used in the drag calculation is augmented with an isotropic velocity fluctuation taken from an estimate of the subgrid kinetic energy.  Following \cite{Breuer:2012}, the gas velocity used in Eqs.~(\ref{part_force}) and (\ref{part_accel}) is given by
+\be
+\mathbf{u} = \tilde{\mathbf{u}} + u^\prime \, {\bm \zeta}
+\ee
+where $\tilde{\mathbf{u}}$ is the resolved LES velocity, $u^\prime = \sqrt{\frac{2}{3}\,k_{sgs}}$, and the components of $\bm \zeta$ are independent standardized Gaussian random variables (zero mean and unit variance) generated from a Box-Muller transform \cite{Box-Muller:1958}.  The subgrid kinetic energy is estimated from the turbulent viscosity as $k_{sgs} = (\mu_t/(\rho C_{\nu} \Delta))^2$; $C_\nu = 0.1$ is the Deardorff eddy viscosity coefficient.
+
+
+

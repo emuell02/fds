@@ -66,7 +66,6 @@ scatplot(saved_data, drange, ...
 disp('turb_model...');                    turb_model
 disp('jet_decay...');                     jet_decay
 disp('wall_model...');                    wall_model
-disp('wall_model_cc...');                 wall_model_cc
 disp('pyrolysis...');                     pyrolysis
 disp('birch_tga...');                     birch_tga
 disp('water_ice_water...');               water_ice_water
@@ -91,10 +90,13 @@ disp('radiating_polygon...');             radiating_polygon
 disp('saad_mms_temporal_error...');       saad_mms_temporal_error
 disp('saad_cc_mms_temporal_error...');    saad_cc_mms_temporal_error
 disp('shunn_mms_temporal_error...');      shunn_mms_temporal_error
+disp('shunn_mms_favreZ...');              shunn_mms_favreZ
+disp('favre_test...');                    favre_test
 disp('scaling_tests...');                 scaling_tests
 disp('hvac_mass_transport...');           hvac_mass_transport
 disp('particle_size_distribution...');    particle_size_distribution
 disp('mass_balance...');                  mass_balance
+disp('mass_balance_reac...');             mass_balance_reac
 disp('ht3d_cond...');                     ht3d_cond
 disp('ht3d_sphere...');                   ht3d_sphere
 disp('geom_positive_errors...');          geom_positive_errors

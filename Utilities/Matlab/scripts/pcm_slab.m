@@ -40,8 +40,8 @@ end
 addpath('../../Verification/Pyrolysis')
 
 skip_case = 0;
-if ~exist('pcm_slab_prof_01.csv')
-    display('Error: File pcm_slab_prof_01.csv does not exist. Skipping case.')
+if ~exist('pcm_slab_prof_1.csv')
+    display('Error: File pcm_slab_prof_1.csv does not exist. Skipping case.')
     skip_case = 1;
 end
 if ~exist('pcm_slab_devc.csv')
@@ -52,7 +52,7 @@ if skip_case
     return
 end
 
-Iprof = csvread('pcm_slab_prof_01.csv',2);
+Iprof = csvread('pcm_slab_prof_1.csv',2);
 M_fds = csvread('pcm_slab_devc.csv',2);
 %
 Ice_density = 990;
@@ -96,7 +96,7 @@ for i_plot=1:2
        h=plot(M_fds(1:5:nt_fds,1),M_fds(1:5:nt_fds,3),'ro');hold on
        h=plot(M_fds(1:5:nt_fds,1),M_fds(1:5:nt_fds,4),'gs');
        xlabel('Time (s)','Interpreter',Font_Interpreter,'FontSize',Label_Font_Size,'FontName',Font_Name)
-       ylabel('Temperature (\circC)','Interpreter',Font_Interpreter,'FontSize',Label_Font_Size,'FontName',Font_Name)
+       ylabel('Temperature (°C)','Interpreter',Font_Interpreter,'FontSize',Label_Font_Size,'FontName',Font_Name)
        legend('Analytical 1 cm','Analytical 5 cm','Analytical 10 cm','FDS 1 cm','FDS 5 cm','FDS 10 cm')
     end
 

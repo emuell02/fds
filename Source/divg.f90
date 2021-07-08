@@ -4,7 +4,7 @@ USE PRECISION_PARAMETERS
 USE GLOBAL_CONSTANTS
 USE MESH_POINTERS
 
-IMPLICIT NONE
+IMPLICIT NONE (TYPE,EXTERNAL)
 PRIVATE
 
 PUBLIC DIVERGENCE_PART_1,DIVERGENCE_PART_2,CHECK_DIVERGENCE
@@ -14,17 +14,15 @@ CONTAINS
 SUBROUTINE DIVERGENCE_PART_1(T,DT,NM)
 
 USE COMP_FUNCTIONS, ONLY: CURRENT_TIME
-USE MATH_FUNCTIONS, ONLY: EVALUATE_RAMP,INTERPOLATE1D_UNIFORM
+USE MATH_FUNCTIONS, ONLY: EVALUATE_RAMP,INTERPOLATE1D_UNIFORM,SCALAR_FACE_VALUE
 USE PHYSICAL_FUNCTIONS, ONLY: GET_CONDUCTIVITY,GET_SPECIFIC_HEAT,GET_SENSIBLE_ENTHALPY_Z,GET_SENSIBLE_ENTHALPY,&
                               GET_VISCOSITY,GET_MOLECULAR_WEIGHT
-USE TURBULENCE, ONLY: TENSOR_DIFFUSIVITY_MODEL,WANNIER_FLOW
-USE MASS, ONLY: SCALAR_FACE_VALUE
 USE GEOMETRY_FUNCTIONS, ONLY: ASSIGN_PRESSURE_ZONE
 USE MANUFACTURED_SOLUTIONS, ONLY: DIFF_MMS,UF_MMS,WF_MMS,VD2D_MMS_Z_SRC !,RHO_0_MMS,RHO_1_MMS
 USE EVAC, ONLY: EVAC_EMESH_EXITS_TYPE, EMESH_EXITS, EMESH_NFIELDS, N_EXITS, N_CO_EXITS, N_DOORS
-USE COMPLEX_GEOMETRY, ONLY : SET_EXIMDIFFLX_3D,SET_DOMAINDIFFLX_3D,SET_EXIMRHOHSLIM_3D,SET_EXIMRHOZZLIM_3D,&
-                             IBM_CGSC, IBM_IDCC, IBM_SOLID, IBM_CUTCFE, &
-                             CCREGION_DIVERGENCE_PART_1,CFACE_PREDICT_NORMAL_VELOCITY
+USE COMPLEX_GEOMETRY, ONLY : IBM_CGSC, IBM_IDCC, IBM_SOLID, IBM_CUTCFE
+USE CC_SCALARS_IBM, ONLY : SET_EXIMDIFFLX_3D,SET_DOMAINDIFFLX_3D,SET_EXIMRHOHSLIM_3D,SET_EXIMRHOZZLIM_3D,&
+                           CCREGION_DIVERGENCE_PART_1,CFACE_PREDICT_NORMAL_VELOCITY
 
 ! Compute contributions to the divergence term
 
@@ -36,15 +34,16 @@ REAL(EB), POINTER, DIMENSION(:,:,:) :: KDTDX,KDTDY,KDTDZ,DP,KP,CP, &
 REAL(EB), POINTER, DIMENSION(:,:,:,:) :: ZZP,RHO_D_DZDX,RHO_D_DZDY,RHO_D_DZDZ
 REAL(EB), POINTER, DIMENSION(:,:) :: PBAR_P
 REAL(EB) :: DELKDELT,VC,VC1,DTDX,DTDY,DTDZ,TNOW, &
-            DZDX,DZDY,DZDZ,RDT,RHO_D_DZDN,TSI,TIME_RAMP_FACTOR,DELTA_P,PRES_RAMP_FACTOR,&
+            DZDX,DZDY,DZDZ,RDT,TSI,TIME_RAMP_FACTOR,DELTA_P,PRES_RAMP_FACTOR,&
             TMP_G,DIV_DIFF_HEAT_FLUX,H_S,ZZZ(1:4),DU,DU_P,DU_M,UN,PROFILE_FACTOR, &
-            XHAT,ZHAT,TT,Q_Z,D_Z_TEMP,D_Z_N(0:5000),RHO_D_DZDN_GET(1:N_TRACKED_SPECIES),JCOR,UN_P,TMP_F_GAS,R_PFCT
-REAL(EB), ALLOCATABLE, DIMENSION(:) :: ZZ_GET
-TYPE(SURFACE_TYPE), POINTER :: SF
-TYPE(SPECIES_MIXTURE_TYPE), POINTER :: SM
+            XHAT,ZHAT,TT,Q_Z,D_Z_TEMP,D_Z_N(0:I_MAX_TEMP),RHO_D_DZDN_GET(1:N_TRACKED_SPECIES),JCOR,UN_P,TMP_F_GAS,R_PFCT,RHO_D_DZDN
 INTEGER :: IW,N,IOR,II,JJ,KK,IIG,JJG,KKG,I,J,K,IPZ,IOPZ,N_ZZ_MAX,ICC
+REAL(EB), ALLOCATABLE, DIMENSION(:) :: ZZ_GET
+TYPE(SURFACE_TYPE), POINTER :: SF=>NULL()
+TYPE(SPECIES_MIXTURE_TYPE), POINTER :: SM=>NULL()
 TYPE(VENTS_TYPE), POINTER :: VT=>NULL()
 TYPE(WALL_TYPE), POINTER :: WC=>NULL()
+TYPE(EXTERNAL_WALL_TYPE), POINTER :: EWC=>NULL()
 
 ! Check whether to skip this routine
 
@@ -63,7 +62,7 @@ SELECT CASE(PREDICTOR)
       PBAR_P => PBAR_S
       RHOP => RHOS
    CASE(.FALSE.)
-      DP => DDDT
+      DP => D
       PBAR_P => PBAR
       RHOP => RHO
 END SELECT
@@ -85,7 +84,7 @@ CALL MERGE_PRESSURE_ZONES
 CALL PREDICT_NORMAL_VELOCITY
 IF (CC_IBM) CALL CFACE_PREDICT_NORMAL_VELOCITY(T,DT)
 
-IF (EVACUATION_ONLY(NM)) GOTO 1000 ! Evacuation meshes jump directly to pressure zone loop
+IF (DO_EVACUATION) GOTO 1000 ! Evacuation meshes jump directly to pressure zone loop
 
 ! Compute species-related finite difference terms
 
@@ -173,39 +172,49 @@ SPECIES_GT_1_IF: IF (N_TOTAL_SCALARS>1) THEN
       ENDDO
       !$OMP END PARALLEL DO
 
-      ! Tensor diffusivity model (experimental)
-
-      IF (TENSOR_DIFFUSIVITY .AND. SIM_MODE/=DNS_MODE) CALL TENSOR_DIFFUSIVITY_MODEL(NM,N)
-
-      ! Store rho*D_n grad Z_n at OPEN boundaries, zero out otherwise
+      ! Store rho*D_n grad Z_n at OPEN boundaries, flux match at INTERPOLATED boundaries, zero out otherwise
 
       WALL_LOOP: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
          WC => WALL(IW)
-         IF (WC%BOUNDARY_TYPE==NULL_BOUNDARY .OR. &
-             WC%BOUNDARY_TYPE==INTERPOLATED_BOUNDARY) CYCLE WALL_LOOP
+         IF (WC%BOUNDARY_TYPE==NULL_BOUNDARY) CYCLE WALL_LOOP
          IIG = WC%ONE_D%IIG
          JJG = WC%ONE_D%JJG
          KKG = WC%ONE_D%KKG
          IOR = WC%ONE_D%IOR
-         IF (WC%BOUNDARY_TYPE==OPEN_BOUNDARY) THEN
-            SELECT CASE(IOR)
-               CASE( 1); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDX(IIG-1,JJG,KKG,N)
-               CASE(-1); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDX(IIG,JJG,KKG,N)
-               CASE( 2); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDY(IIG,JJG-1,KKG,N)
-               CASE(-2); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDY(IIG,JJG,KKG,N)
-               CASE( 3); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDZ(IIG,JJG,KKG-1,N)
-               CASE(-3); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDZ(IIG,JJG,KKG,N)
-            END SELECT
-         ELSE
-            SELECT CASE(IOR)
-               CASE( 1); RHO_D_DZDX(IIG-1,JJG,KKG,N) = 0._EB
-               CASE(-1); RHO_D_DZDX(IIG,JJG,KKG,N)   = 0._EB
-               CASE( 2); RHO_D_DZDY(IIG,JJG-1,KKG,N) = 0._EB
-               CASE(-2); RHO_D_DZDY(IIG,JJG,KKG,N)   = 0._EB
-               CASE( 3); RHO_D_DZDZ(IIG,JJG,KKG-1,N) = 0._EB
-               CASE(-3); RHO_D_DZDZ(IIG,JJG,KKG,N)   = 0._EB
-            END SELECT
-         ENDIF
+         BOUNDARY_TYPE_SELECT: SELECT CASE(WC%BOUNDARY_TYPE)
+            CASE DEFAULT
+               SELECT CASE(IOR)
+                  CASE( 1); RHO_D_DZDX(IIG-1,JJG,KKG,N) = 0._EB
+                  CASE(-1); RHO_D_DZDX(IIG,JJG,KKG,N)   = 0._EB
+                  CASE( 2); RHO_D_DZDY(IIG,JJG-1,KKG,N) = 0._EB
+                  CASE(-2); RHO_D_DZDY(IIG,JJG,KKG,N)   = 0._EB
+                  CASE( 3); RHO_D_DZDZ(IIG,JJG,KKG-1,N) = 0._EB
+                  CASE(-3); RHO_D_DZDZ(IIG,JJG,KKG,N)   = 0._EB
+               END SELECT
+            CASE(OPEN_BOUNDARY,INTERPOLATED_BOUNDARY)
+               EWC => EXTERNAL_WALL(IW)
+               IF (EWC%NIC>1) THEN
+                  ! overwrite coarse mesh diffusive flux with fine mesh average (flux matched) computed in wall_bc
+                  SELECT CASE(IOR)
+                     CASE( 1); RHO_D_DZDX(IIG-1,JJG,KKG,N) =  WC%ONE_D%RHO_D_DZDN_F(N)
+                     CASE(-1); RHO_D_DZDX(IIG,JJG,KKG,N)   = -WC%ONE_D%RHO_D_DZDN_F(N)
+                     CASE( 2); RHO_D_DZDY(IIG,JJG-1,KKG,N) =  WC%ONE_D%RHO_D_DZDN_F(N)
+                     CASE(-2); RHO_D_DZDY(IIG,JJG,KKG,N)   = -WC%ONE_D%RHO_D_DZDN_F(N)
+                     CASE( 3); RHO_D_DZDZ(IIG,JJG,KKG-1,N) =  WC%ONE_D%RHO_D_DZDN_F(N)
+                     CASE(-3); RHO_D_DZDZ(IIG,JJG,KKG,N)   = -WC%ONE_D%RHO_D_DZDN_F(N)
+                  END SELECT
+               ELSE
+                  ! store computed flux for output
+                  SELECT CASE(IOR)
+                     CASE( 1); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDX(IIG-1,JJG,KKG,N)
+                     CASE(-1); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDX(IIG,JJG,KKG,N)
+                     CASE( 2); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDY(IIG,JJG-1,KKG,N)
+                     CASE(-2); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDY(IIG,JJG,KKG,N)
+                     CASE( 3); WC%ONE_D%RHO_D_DZDN_F(N) =  RHO_D_DZDZ(IIG,JJG,KKG-1,N)
+                     CASE(-3); WC%ONE_D%RHO_D_DZDN_F(N) = -RHO_D_DZDZ(IIG,JJG,KKG,N)
+                  END SELECT
+               ENDIF
+         END SELECT BOUNDARY_TYPE_SELECT
       ENDDO WALL_LOOP
 
       IF (CHECK_MASS_CONSERVE) THEN
@@ -241,6 +250,9 @@ SPECIES_GT_1_IF: IF (N_TOTAL_SCALARS>1) THEN
    ! Ensure RHO_D terms sum to zero over all species.  Gather error into largest mass fraction present.
 
    IF (SIM_MODE==DNS_MODE .OR. SIM_MODE==LES_MODE) THEN
+      ! for VLES and SVLES modes, the diffusivity is the same for all species
+      ! so, as long as ZZP is realizable, the sum of diffusive fluxes will be zero
+      ! and the flux corrections below are not required
 
       !$OMP PARALLEL DO PRIVATE(N) SCHEDULE(STATIC)
       DO K=0,KBAR
@@ -605,6 +617,8 @@ ELSE
    WW=>WS
 ENDIF
 
+IF (STORE_DIVERGENCE_CORRECTION) DCOR=0._EB
+
 ! Compute U_DOT_DEL_RHO_H_S and add to other enthalpy equation source terms
 
 CONST_GAMMA_IF_1: IF (.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
@@ -616,6 +630,7 @@ CONST_GAMMA_IF_1: IF (.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
          DO I=1,IBAR
             IF (SOLID(CELL_INDEX(I,J,K))) CYCLE
             DP(I,J,K) = DP(I,J,K) - U_DOT_DEL_RHO_H_S(I,J,K)
+            IF (STORE_DIVERGENCE_CORRECTION) DCOR(I,J,K) = - U_DOT_DEL_RHO_H_S(I,J,K)
          ENDDO
       ENDDO
    ENDDO
@@ -650,6 +665,7 @@ ELSE
             IF (SOLID(CELL_INDEX(I,J,K))) CYCLE
             RTRM(I,J,K) = R_H_G(I,J,K)/RHOP(I,J,K)
             DP(I,J,K) = RTRM(I,J,K)*DP(I,J,K)
+            IF (STORE_DIVERGENCE_CORRECTION) DCOR(I,J,K) = RTRM(I,J,K)*DCOR(I,J,K)
          ENDDO
       ENDDO
    ENDDO
@@ -675,6 +691,10 @@ CONST_GAMMA_IF_2: IF (.NOT.CONSTANT_SPECIFIC_HEAT_RATIO) THEN
                CALL GET_SENSIBLE_ENTHALPY_Z(N,TMP(I,J,K),H_S)
                DP(I,J,K) = DP(I,J,K) + (SM%RCON/RSUM(I,J,K) - H_S*R_H_G(I,J,K))* &
                     ( DEL_RHO_D_DEL_Z(I,J,K,N) - U_DOT_DEL_RHO_Z(I,J,K) )/RHOP(I,J,K)
+
+               IF (STORE_DIVERGENCE_CORRECTION) THEN
+                  DCOR(I,J,K) = DCOR(I,J,K) - (SM%RCON/RSUM(I,J,K) - H_S*R_H_G(I,J,K))*U_DOT_DEL_RHO_Z(I,J,K)/RHOP(I,J,K)
+               ENDIF
             ENDDO
          ENDDO
       ENDDO
@@ -756,7 +776,7 @@ IF_PRESSURE_ZONES: IF (N_ZONE>0) THEN
    DSUM(1:N_ZONE,NM) = 0._EB
    PSUM(1:N_ZONE,NM) = 0._EB
 
-   IF (EVACUATION_ONLY(NM)) RTRM=1._EB
+   IF (DO_EVACUATION) RTRM=1._EB
 
    R_PFCT = 1._EB
    DO K=1,KBAR
@@ -924,7 +944,11 @@ WALL_LOOP: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
             ! ///   II   ///  II+1  |  II+2  | ...
             !                       ^ WALL_INDEX(II+1,+1)
             IF ((UU(II+1,JJ,KK)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II+1,JJ,KK),+1)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II+1:II+2,JJ,KK)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II+1:II+2,JJ,KK)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_H_S_P(II+1,JJ,KK),RHO_H_S_P(II+1:II+2,JJ,KK)/)
+               ENDIF
                FX_H_S(II+1,JJ,KK) = SCALAR_FACE_VALUE(UU(II+1,JJ,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-1) OFF_WALL_SELECT_1
@@ -932,27 +956,47 @@ WALL_LOOP: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
             ! ... |  II-2  |  II-1  ///   II   ///
             !              ^ WALL_INDEX(II-1,-1)
             IF ((UU(II-2,JJ,KK)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II-1,JJ,KK),-1)>0)) THEN
-               ZZZ(2:4) = (/RHO_H_S_P(II-2:II-1,JJ,KK),WC%ONE_D%RHO_F*H_S/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_H_S_P(II-2:II-1,JJ,KK),WC%ONE_D%RHO_F*H_S/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_H_S_P(II-2:II-1,JJ,KK),RHO_H_S_P(II-1,JJ,KK)/)
+               ENDIF
                FX_H_S(II-2,JJ,KK) = SCALAR_FACE_VALUE(UU(II-2,JJ,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE( 2) OFF_WALL_SELECT_1
             IF ((VV(II,JJ+1,KK)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ+1,KK),+2)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II,JJ+1:JJ+2,KK)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II,JJ+1:JJ+2,KK)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_H_S_P(II,JJ+1,KK),RHO_H_S_P(II,JJ+1:JJ+2,KK)/)
+               ENDIF
                FY_H_S(II,JJ+1,KK) = SCALAR_FACE_VALUE(VV(II,JJ+1,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-2) OFF_WALL_SELECT_1
             IF ((VV(II,JJ-2,KK)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ-1,KK),-2)>0)) THEN
-               ZZZ(2:4) = (/RHO_H_S_P(II,JJ-2:JJ-1,KK),WC%ONE_D%RHO_F*H_S/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_H_S_P(II,JJ-2:JJ-1,KK),WC%ONE_D%RHO_F*H_S/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_H_S_P(II,JJ-2:JJ-1,KK),RHO_H_S_P(II,JJ-1,KK)/)
+               ENDIF
                FY_H_S(II,JJ-2,KK) = SCALAR_FACE_VALUE(VV(II,JJ-2,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE( 3) OFF_WALL_SELECT_1
             IF ((WW(II,JJ,KK+1)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ,KK+1),+3)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II,JJ,KK+1:KK+2)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*H_S,RHO_H_S_P(II,JJ,KK+1:KK+2)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_H_S_P(II,JJ,KK+1),RHO_H_S_P(II,JJ,KK+1:KK+2)/)
+               ENDIF
                FZ_H_S(II,JJ,KK+1) = SCALAR_FACE_VALUE(WW(II,JJ,KK+1),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-3) OFF_WALL_SELECT_1
             IF ((WW(II,JJ,KK-2)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ,KK-1),-3)>0)) THEN
-               ZZZ(2:4) = (/RHO_H_S_P(II,JJ,KK-2:KK-1),WC%ONE_D%RHO_F*H_S/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_H_S_P(II,JJ,KK-2:KK-1),WC%ONE_D%RHO_F*H_S/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_H_S_P(II,JJ,KK-2:KK-1),RHO_H_S_P(II,JJ,KK-1)/)
+               ENDIF
                FZ_H_S(II,JJ,KK-2) = SCALAR_FACE_VALUE(WW(II,JJ,KK-2),ZZZ,I_FLUX_LIMITER)
             ENDIF
       END SELECT OFF_WALL_SELECT_1
@@ -1108,7 +1152,11 @@ WALL_LOOP: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
             ! ///   II   ///  II+1  |  II+2  | ...
             !                       ^ WALL_INDEX(II+1,+1)
             IF ((UU(II+1,JJ,KK)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II+1,JJ,KK),+1)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II+1:II+2,JJ,KK)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II+1:II+2,JJ,KK)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_Z_P(II+1,JJ,KK),RHO_Z_P(II+1:II+2,JJ,KK)/)
+               ENDIF
                FX_ZZ(II+1,JJ,KK) = SCALAR_FACE_VALUE(UU(II+1,JJ,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-1) OFF_WALL_SELECT_2
@@ -1116,27 +1164,47 @@ WALL_LOOP: DO IW=1,N_EXTERNAL_WALL_CELLS+N_INTERNAL_WALL_CELLS
             ! ... |  II-2  |  II-1  ///   II   ///
             !              ^ WALL_INDEX(II-1,-1)
             IF ((UU(II-2,JJ,KK)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II-1,JJ,KK),-1)>0)) THEN
-               ZZZ(2:4) = (/RHO_Z_P(II-2:II-1,JJ,KK),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_Z_P(II-2:II-1,JJ,KK),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_Z_P(II-2:II-1,JJ,KK),RHO_Z_P(II-1,JJ,KK)/)
+               ENDIF
                FX_ZZ(II-2,JJ,KK) = SCALAR_FACE_VALUE(UU(II-2,JJ,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE( 2) OFF_WALL_SELECT_2
             IF ((VV(II,JJ+1,KK)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ+1,KK),+2)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II,JJ+1:JJ+2,KK)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II,JJ+1:JJ+2,KK)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_Z_P(II,JJ+1,KK),RHO_Z_P(II,JJ+1:JJ+2,KK)/)
+               ENDIF
                FY_ZZ(II,JJ+1,KK) = SCALAR_FACE_VALUE(VV(II,JJ+1,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-2) OFF_WALL_SELECT_2
             IF ((VV(II,JJ-2,KK)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ-1,KK),-2)>0)) THEN
-               ZZZ(2:4) = (/RHO_Z_P(II,JJ-2:JJ-1,KK),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_Z_P(II,JJ-2:JJ-1,KK),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_Z_P(II,JJ-2:JJ-1,KK),RHO_Z_P(II,JJ-1,KK)/)
+               ENDIF
                FY_ZZ(II,JJ-2,KK) = SCALAR_FACE_VALUE(VV(II,JJ-2,KK),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE( 3) OFF_WALL_SELECT_2
             IF ((WW(II,JJ,KK+1)>0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ,KK+1),+3)>0)) THEN
-               ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II,JJ,KK+1:KK+2)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(1:3) = (/WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N),RHO_Z_P(II,JJ,KK+1:KK+2)/)
+               ELSE
+                  ZZZ(1:3) = (/RHO_Z_P(II,JJ,KK+1),RHO_Z_P(II,JJ,KK+1:KK+2)/)
+               ENDIF
                FZ_ZZ(II,JJ,KK+1) = SCALAR_FACE_VALUE(WW(II,JJ,KK+1),ZZZ,I_FLUX_LIMITER)
             ENDIF
          CASE(-3) OFF_WALL_SELECT_2
             IF ((WW(II,JJ,KK-2)<0._EB) .AND. .NOT.(WALL_INDEX(CELL_INDEX(II,JJ,KK-1),-3)>0)) THEN
-               ZZZ(2:4) = (/RHO_Z_P(II,JJ,KK-2:KK-1),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               IF (OW_ADVFLX_USE_WALL) THEN
+                  ZZZ(2:4) = (/RHO_Z_P(II,JJ,KK-2:KK-1),WC%ONE_D%RHO_F*WC%ONE_D%ZZ_F(N)/)
+               ELSE
+                  ZZZ(2:4) = (/RHO_Z_P(II,JJ,KK-2:KK-1),RHO_Z_P(II,JJ,KK-1)/)
+               ENDIF
                FZ_ZZ(II,JJ,KK-2) = SCALAR_FACE_VALUE(WW(II,JJ,KK-2),ZZZ,I_FLUX_LIMITER)
             ENDIF
       END SELECT OFF_WALL_SELECT_2
@@ -1203,7 +1271,7 @@ SUBROUTINE MERGE_PRESSURE_ZONES
 
 CONNECTED_ZONES(:,:,NM) = .FALSE.
 
-IF (EVACUATION_ONLY(NM)) THEN
+IF (DO_EVACUATION) THEN
    CALL EVACUATION_PRESSURE_ZONES
    RETURN
 END IF
@@ -1258,7 +1326,7 @@ PREDICT_NORMALS: IF (PREDICTOR) THEN
 
             IF (SF%SPECIES_BC_INDEX==SPECIFIED_MASS_FLUX .OR. &
                 SF%SPECIES_BC_INDEX==INTERPOLATED_BC     .OR. &
-                WC%NODE_INDEX > 0                        .OR. &
+                WC%ONE_D%NODE_INDEX > 0                  .OR. &
                 ANY(SF%LEAK_PATH>0))                          &
                 CYCLE WALL_LOOP3
 
@@ -1277,17 +1345,17 @@ PREDICT_NORMALS: IF (PREDICTOR) THEN
             PRES_RAMP_FACTOR = SIGN(1._EB,SF%MAX_PRESSURE-DELTA_P)*SQRT(ABS((DELTA_P-SF%MAX_PRESSURE)/SF%MAX_PRESSURE))
             SELECT CASE(IOR)
                CASE( 1)
-                  WC%ONE_D%U_NORMAL_S =-U0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0+U0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                CASE(-1)
-                  WC%ONE_D%U_NORMAL_S = U0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0-U0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                CASE( 2)
-                  WC%ONE_D%U_NORMAL_S =-V0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0+V0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                CASE(-2)
-                  WC%ONE_D%U_NORMAL_S = V0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0-V0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                CASE( 3)
-                  WC%ONE_D%U_NORMAL_S =-W0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0+W0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                CASE(-3)
-                  WC%ONE_D%U_NORMAL_S = W0 + TIME_RAMP_FACTOR*(WC%ONE_D%U_NORMAL_0-W0)
+                  WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
             END SELECT
             ! Special Cases
             NEUMANN_IF: IF (SF%SPECIFIED_NORMAL_GRADIENT) THEN
@@ -1347,21 +1415,6 @@ PREDICT_NORMALS: IF (PREDICTOR) THEN
                   END IF
                   WC%ONE_D%U_NORMAL_S = TIME_RAMP_FACTOR*WC%ONE_D%U_NORMAL_0
                END IF EVACUATION_BC_IF
-               WANNIER_BC: IF (PERIODIC_TEST==5) THEN
-                  II = WC%ONE_D%II
-                  JJ = WC%ONE_D%JJ
-                  KK = WC%ONE_D%KK
-                  SELECT CASE(IOR)
-                     CASE( 1)
-                        WC%ONE_D%U_NORMAL_S = -WANNIER_FLOW(X(II),ZC(KK),1)
-                     CASE(-1)
-                        WC%ONE_D%U_NORMAL_S =  WANNIER_FLOW(X(II-1),ZC(KK),1)
-                     CASE( 3)
-                        WC%ONE_D%U_NORMAL_S = -WANNIER_FLOW(XC(II),Z(KK),2)
-                     CASE(-3)
-                        WC%ONE_D%U_NORMAL_S =  WANNIER_FLOW(XC(II),Z(KK-1),2)
-                  END SELECT
-               ENDIF WANNIER_BC
             ENDIF VENT_IF
 
          CASE(OPEN_BOUNDARY,INTERPOLATED_BOUNDARY)
@@ -1407,7 +1460,7 @@ ELSE PREDICT_NORMALS
          SF => SURFACE(WC%SURF_INDEX)
          IF (SF%SPECIES_BC_INDEX==SPECIFIED_MASS_FLUX .OR. &
              SF%SPECIES_BC_INDEX==INTERPOLATED_BC     .OR. &
-             WC%NODE_INDEX > 0                        .OR. &
+             WC%ONE_D%NODE_INDEX > 0                  .OR. &
              ANY(SF%LEAK_PATH>0)) CYCLE
       ENDIF
       WC%ONE_D%U_NORMAL = WC%ONE_D%U_NORMAL_S
@@ -1427,11 +1480,10 @@ END SUBROUTINE PREDICT_NORMAL_VELOCITY
 
 
 SUBROUTINE EVACUATION_PRESSURE_ZONES
-IMPLICIT NONE
 REAL(EB) :: X1,Y1,X2,Y2,Z1,Z2
 INTEGER :: IW,N,II,JJ,KK,IIG,JJG,KKG,ITMP,I,J,K,I_VENT,N_OVERLAP
 
-IF (.NOT.EVACUATION_ONLY(NM)) RETURN
+IF (.NOT.DO_EVACUATION) RETURN
 
 ! Evacuation flow field calculation: Change the outflow vent pressure zone and initialize everything
 
@@ -1472,7 +1524,7 @@ EVACUATION_PREDICTOR: IF (PREDICTOR) THEN
       DO I = 1,N_ZONE
          IF (.NOT.(P_ZONE(I)%EVACUATION)) CYCLE
          IF (P_ZONE(I)%MESH_INDEX==NM) THEN
-            N = I ! The ordinar number of the pressure zone of this main evacuation mesh
+            N = I ! The ordinal number of the pressure zone of this main evacuation mesh
             EXIT
          END IF
       END DO
@@ -1486,9 +1538,9 @@ EVACUATION_PREDICTOR: IF (PREDICTOR) THEN
       PBAR=P_INF; PBAR_S=P_INF; R_PBAR=0._EB; D_PBAR_DT=0._EB; D_PBAR_DT_S=0._EB
       RHO=RHO_0(1); RHOS=RHO_0(1); TMP=TMPA
       USUM(:,NM) = 0.0_EB ; DSUM(:,NM) = 0.0_EB; PSUM(:,NM) = 0.0_EB
-      PRESSURE_ZONE = 0
+      PRESSURE_ZONE = -1
 
-      DO K=0,KBP1
+      ZONE_LOOP_EVAC: DO K=0,KBP1
          DO J=0,JBP1
             DO I=0,IBP1
                IF (PRESSURE_ZONE(I,J,K)==N) CYCLE
@@ -1496,8 +1548,18 @@ EVACUATION_PREDICTOR: IF (PREDICTOR) THEN
                     YC(J) - Y1 >=0._EB .AND. YC(J) < Y2 .AND. &
                     ZC(K) - Z1 >=0._EB .AND. ZC(K) < Z2) THEN
                   PRESSURE_ZONE(I,J,K) = N
-                  IF (.NOT.SOLID(CELL_INDEX(I,J,K))) CALL ASSIGN_PRESSURE_ZONE(NM,XC(I),YC(J),ZC(K),N,N_OVERLAP)
+                  IF (.NOT.SOLID(CELL_INDEX(I,J,K))) THEN
+                     CALL ASSIGN_PRESSURE_ZONE(NM,XC(I),YC(J),ZC(K),N,N_OVERLAP)
+                     EXIT ZONE_LOOP_EVAC
+                  ENDIF
                ENDIF
+            ENDDO
+         ENDDO
+      ENDDO ZONE_LOOP_EVAC
+      DO K=0,KBP1
+         DO J=0,JBP1
+            DO I=0,IBP1
+               PRESSURE_ZONE(I,J,K) = MAX(0,PRESSURE_ZONE(I,J,K))
             ENDDO
          ENDDO
       ENDDO
@@ -1518,6 +1580,7 @@ EVACUATION_PREDICTOR: IF (PREDICTOR) THEN
          KKG = WC%ONE_D%KKG
          IF (KK==1) WC%ONE_D%PRESSURE_ZONE = PRESSURE_ZONE(IIG,JJG,KKG)
       END DO
+
    END IF EVACUATION_NEW_FIELD
 END IF EVACUATION_PREDICTOR
 
@@ -1536,7 +1599,7 @@ USE COMPLEX_GEOMETRY, ONLY : IBM_CGSC, IBM_IDCC, IBM_SOLID, IBM_CUTCFE
 
 INTEGER, INTENT(IN) :: NM
 REAL(EB), INTENT(IN) :: DT
-REAL(EB), POINTER, DIMENSION(:,:,:) :: DP,D_NEW,RTRM,DIV
+REAL(EB), POINTER, DIMENSION(:,:,:) :: DP,RTRM,DIV
 REAL(EB) :: USUM_ADD(N_ZONE),UN_P
 REAL(EB) :: RDT,TNOW,P_EQ,SUM_P_PSUM,SUM_USUM,SUM_DSUM,SUM_PSUM,R_PFCT
 LOGICAL :: OPEN_ZONE
@@ -1559,7 +1622,7 @@ SELECT CASE(PREDICTOR)
       DP => DS
       PBAR_P => PBAR_S
    CASE(.FALSE.)
-      DP => DDDT
+      DP => D
       PBAR_P => PBAR
 END SELECT
 
@@ -1572,7 +1635,7 @@ RTRM => WORK1
 USUM_ADD = 0._EB
 
 DO IPZ=1,N_ZONE
-   IF (EVACUATION_ONLY(NM) .OR. P_ZONE(IPZ)%EVACUATION .OR. P_ZONE(IPZ)%PERIODIC) CYCLE
+   IF (DO_EVACUATION .OR. P_ZONE(IPZ)%EVACUATION .OR. P_ZONE(IPZ)%PERIODIC) CYCLE
    SUM_P_PSUM = PBAR_P(1,IPZ)*PSUM(IPZ,NM)
    OPEN_ZONE  = .FALSE.
    SUM_USUM = USUM(IPZ,NM)
@@ -1707,60 +1770,31 @@ ENDDO BC_LOOP
 
 ! Compute time derivative of the divergence, dD/dt
 
-TRUE_PROJECTION: IF (PROJECTION) THEN
+DIV=>WORK1
 
-   DIV=>WORK1
-
-   IF (PREDICTOR) THEN
-      DO K = 1,KBAR
-         DO J = 1,JBAR
-            DO I = 1,IBAR
-               DIV(I,J,K) = (R(I)*U(I,J,K)-R(I-1)*U(I-1,J,K))*RDX(I)*RRN(I) + (V(I,J,K)-V(I,J-1,K))*RDY(J) + &
-                            (W(I,J,K)-W(I,J,K-1))*RDZ(K)
-            ENDDO
+IF (PREDICTOR) THEN
+   DO K = 1,KBAR
+      DO J = 1,JBAR
+         DO I = 1,IBAR
+            DIV(I,J,K) = (R(I)*U(I,J,K)-R(I-1)*U(I-1,J,K))*RDX(I)*RRN(I) + (V(I,J,K)-V(I,J-1,K))*RDY(J) + &
+                         (W(I,J,K)-W(I,J,K-1))*RDZ(K)
          ENDDO
       ENDDO
-      DDDT = (DP-DIV)*RDT
-   ELSEIF (CORRECTOR) THEN
-      DO K = 1,KBAR
-         DO J = 1,JBAR
-            DO I = 1,IBAR
-               DIV(I,J,K) = (R(I)*U(I,J,K) -R(I-1)*U(I-1,J,K)) *RDX(I)*RRN(I) + (V(I,J,K)- V(I,J-1,K)) *RDY(J) + &
-                            (W(I,J,K) -W(I,J,K-1)) *RDZ(K) &
-                          + (R(I)*US(I,J,K)-R(I-1)*US(I-1,J,K))*RDX(I)*RRN(I) + (VS(I,J,K)-VS(I,J-1,K))*RDY(J) + &
-                            (WS(I,J,K)-WS(I,J,K-1))*RDZ(K)
-            ENDDO
+   ENDDO
+   DDDT = (DP-DIV)*RDT
+ELSEIF (CORRECTOR) THEN
+   DO K = 1,KBAR
+      DO J = 1,JBAR
+         DO I = 1,IBAR
+            DIV(I,J,K) = (R(I)*U(I,J,K) -R(I-1)*U(I-1,J,K)) *RDX(I)*RRN(I) + (V(I,J,K)- V(I,J-1,K)) *RDY(J) + &
+                         (W(I,J,K) -W(I,J,K-1)) *RDZ(K) &
+                       + (R(I)*US(I,J,K)-R(I-1)*US(I-1,J,K))*RDX(I)*RRN(I) + (VS(I,J,K)-VS(I,J-1,K))*RDY(J) + &
+                         (WS(I,J,K)-WS(I,J,K-1))*RDZ(K)
          ENDDO
       ENDDO
-      D = DDDT
-      DDDT = (2._EB*DP-DIV)*RDT
-   ENDIF
-
-ELSE TRUE_PROJECTION
-
-   IF (PREDICTOR) THEN
-      DDDT = (DS-D)*RDT
-   ELSE
-      D_NEW => WORK1
-      D_NEW = DP
-      DDDT  = (2._EB*D_NEW-DS-D)*RDT
-      D     = D_NEW
-   ENDIF
-
-   ! Adjust dD/dt to correct error in divergence due to velocity matching at interpolated boundaries
-
-   NO_SCARC_IF: IF (PRES_METHOD /= 'SCARC' .AND. PRES_METHOD /= 'USCARC') THEN
-      DO IW=1,N_EXTERNAL_WALL_CELLS
-         IF (EXTERNAL_WALL(IW)%NOM==0) CYCLE
-         IIG = WALL(IW)%ONE_D%IIG
-         JJG = WALL(IW)%ONE_D%JJG
-         KKG = WALL(IW)%ONE_D%KKG
-         IF (PREDICTOR) DDDT(IIG,JJG,KKG) = DDDT(IIG,JJG,KKG) + DS_CORR(IW)*RDT
-         IF (CORRECTOR) DDDT(IIG,JJG,KKG) = DDDT(IIG,JJG,KKG) + (2._EB*D_CORR(IW)-DS_CORR(IW))*RDT
-      ENDDO
-   ENDIF NO_SCARC_IF
-
-ENDIF TRUE_PROJECTION
+   ENDDO
+   DDDT = (2._EB*DP-DIV)*RDT
+ENDIF
 
 T_USED(2)=T_USED(2)+CURRENT_TIME()-TNOW
 END SUBROUTINE DIVERGENCE_PART_2

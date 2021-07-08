@@ -1,12 +1,9 @@
-&HEAD CHID='ground_vegetation_radi', FYI='Comparison of boundary models' /
+&HEAD CHID='ground_vegetation_radi', TITLE='Comparison of boundary models' /
 
 &TIME T_END=30. /
 
 &MESH IJK=20,20,20, XB=0.0,1.0,-0.5,0.5,0.0,1.0 /
 &MESH IJK=20,20,20, XB=1.5,2.5,-0.5,0.5,0.0,1.0 /
-
-&ZONE XYZ=0.5,0.0,0.5 /
-&ZONE XYZ=2.0,0.0,0.5 /
 
 &VENT MB='XMIN', SURF_ID='MIRROR' /
 &VENT MB='XMAX', SURF_ID='MIRROR' /
@@ -39,7 +36,6 @@
       PACKING_RATIO(1) = 0.02
       COLOR = 'FOREST GREEN'
       DRAG_COEFFICIENT = 2.8
-      SHAPE_FACTOR   = 0.25
       SURFACE_VOLUME_RATIO(1) = 3092. 
       BACKING = 'EXPOSED'
       THICKNESS(1) = 0.05 /
@@ -52,7 +48,6 @@
 
 &PART ID             = 'Blade of Grass'
       DRAG_COEFFICIENT = 2.8
-      SHAPE_FACTOR   = 0.25
       COLOR          = 'FOREST GREEN'
       SURF_ID        = 'Blade of Grass'
       QUANTITIES     = 'PARTICLE TEMPERATURE','PARTICLE MASS'

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script runs the FDS Verification Cases on a linux machine with
+# This script runs the FDS Cases on a linux machine with
 # a batch queuing system
 
 if [ ! -e .verification_script_dir ]; then
@@ -10,13 +10,19 @@ if [ ! -e .verification_script_dir ]; then
    exit
 fi
 
-QUEUE=batch
+if [ "$WINDIR" == "" ]; then
+  QUEUE=batch
+else
+  QUEUE=terminal
+fi
 DEBUG=
 SINGLE=
 nthreads=1
-resource_manager=
 walltime=
 RUNOPTION=
+if [ "$USE_MAX_CORES" != "" ]; then
+   RUNOPTION=-N
+fi
 CURDIR=`pwd`
 QFDS_COUNT=/tmp/qfds_count_`whoami`
 if [ "$BACKGROUND_PROG" == "" ]; then
@@ -32,19 +38,26 @@ REGULAR=1
 BENCHMARK=1
 OOPT=
 POPT=
+# make Intel MPI the default on a linux system
 INTEL=i
 INTEL2="-I"
-GEOMCASES=1
+# make OpenMPI default on the Mac
+if [ "`uname`" == "Darwin" ]; then
+  INTEL=
+  INTEL2=
+fi
 INSPECTCASES=
 WAIT=
 EXE=
 CHECKCASES=
-RERUN=
 DELAY=
+SUBSET=
+RESTART=
+FIREBOT_LITE=
+VALIDATION=
 
 function usage {
-echo "Run_FDS_Cases.sh [ -d -h -m max_iterations -o nthreads -q queue_name "
-echo "                   -s -r resource_manager ]"
+echo "Run_FDS_Cases.sh [ -d -h -m max_iterations -o nthreads -q queue_name -s "
 echo "Runs FDS verification suite"
 echo ""
 echo "Options"
@@ -54,8 +67,6 @@ echo "-d - use debug version of FDS"
 echo "-D n - delay the submission of each case by n seconds"
 echo "-e exe - run using exe"
 echo "      Note: environment must be defined to use this executable"
-echo "-F - rerun 'regular' cases that failed with 'BAD TERMINATION' errors"
-echo "-g - run only geometry cases"
 echo "-h - display this message"
 echo "-j - job prefix"
 echo "-J - use Intel MPI version of FDS"
@@ -63,15 +74,13 @@ echo "-m max_iterations - stop FDS runs after a specifed number of iterations (d
 echo "     example: an option of 10 would cause FDS to stop after 10 iterations"
 echo "-o nthreads - run FDS with a specified number of threads [default: $nthreads]"
 echo "-O - use OpenMPI version of FDS"
-echo "-q queue_name - run cases using the queue queue_name"
-echo "     default: batch"
-echo "     other options: fire70s, vis"
-echo "-r resource_manager - run cases using the resource manager"
-echo "     default: PBS"
-echo "     other options: SLURM"
+echo "-q queue_name - run cases using the queue queue_name [default: batch]"
+echo "-r - run restart test cases"
 echo "-R - run only regular (non-benchmark) cases"
 echo "-s - stop FDS runs"
+echo "-S - run cases in FDS_Cases_Subset.sh"
 echo "-t - run only thread checking cases"
+echo "-V - run validation cases"
 echo "-w time - walltime request for a batch job"
 echo "     default: empty"
 echo "     format for PBS: hh:mm:ss, format for SLURM: dd-hh:mm:ss"
@@ -118,14 +127,16 @@ cd $SVNROOT
 export SVNROOT=`pwd`
 cd $CURDIR
 
-while getopts 'bB:c:CdD:e:D:Fghj:JL:m:o:Oq:r:RsS:tw:W' OPTION
+while getopts 'bCdD:e:hj:Jm:o:Oq:rRsStVw:W' OPTION
 do
 case $OPTION in
   b)
    BENCHMARK=1
-   GEOMCASES=
+   INSPECTCASES=
    REGULAR=
-   RERUN=
+   RESTART=
+   SUBSET=
+   VALIDATION=
    ;;
   C)
    CHECKCASES="1"
@@ -139,18 +150,6 @@ case $OPTION in
    ;;
   e)
    EXE="$OPTARG"
-   ;;
-  F)
-   BENCHMARK=
-   GEOMCASES=
-   REGULAR=
-   RERUN=1
-   ;;
-  g)
-   BENCHMARK=
-   GEOMCASES=1
-   REGULAR=
-   RERUN=
    ;;
   h)
    usage;
@@ -176,24 +175,43 @@ case $OPTION in
    QUEUE="$OPTARG"
    ;;
   r)
-   resource_manager="$OPTARG"
+   BENCHMARK=
+   INSPECTCASES=
+   REGULAR=
+   RESTART=1
+   SUBSET=
+   VALIDATION=
    ;;
   R)
    BENCHMARK=
-   GEOMCASES=1
+   INSPECTCASES=
    REGULAR=1
-   RERUN=
+   RESTART=
+   SUBSET=
+   VALIDATION=
    ;;
   s)
    export STOPFDS=1
    ;;
+  S)
+   FIREBOT_LITE=1
+   ;;
   t)
    BENCHMARK=
-   GEOMCASES=
    REGULAR=
-   RERUN=
+   RESTART=
    INSPECTCASES=1
+   SUBSET=
    DEBUG=_inspect
+   VALIDATION=
+   ;;
+  V)
+   BENCHMARK=
+   INSPECTCASES=
+   REGULAR=
+   RESTART=
+   SUBSET=
+   VALIDATION=1
    ;;
   w)
    walltime="-w $OPTARG"
@@ -204,6 +222,14 @@ case $OPTION in
 esac
 done
 
+if [ "$FIREBOT_LITE" != "" ]; then
+   BENCHMARK=
+   REGULAR=
+   RESTART=
+   VALIDATION=
+   SUBSET=1
+fi
+
 if [ "$JOBPREFIX" == "" ]; then
   JOBPREFIX=FB_
 fi
@@ -211,11 +237,14 @@ export JOBPREFIX
 
 size=_64
 
-OS=`uname`
-if [ "$OS" == "Darwin" ]; then
+if [ "`uname`" == "Darwin" ]; then
   PLATFORM=osx$size
 else
-  PLATFORM=linux$size
+  if [ "$WINDIR" != "" ]; then
+    PLATFORM=win$size
+  else
+    PLATFORM=linux$size
+  fi
 fi
 if [ "$OOPT" != "" ]; then
   OOPT="-O $OOPT"
@@ -233,11 +262,6 @@ fi
 
 export QFDSSH="$SVNROOT/fds/Utilities/Scripts/qfds.sh $RUNOPTION $DELAY"
 
-if [ "$resource_manager" == "SLURM" ]; then
-   export RESOURCE_MANAGER="SLURM"
-else
-   export RESOURCE_MANAGER="PBS"
-fi
 if [ "$QUEUE" != "" ]; then
    if [ "$QUEUE" == "none" ]; then
       echo 0 > $QFDS_COUNT
@@ -247,7 +271,7 @@ fi
 
 export BASEDIR=`pwd`
 
-export QFDS="$QFDSSH $walltime -n $nthreads $INTEL2 -e $FDSMPI $QUEUE $OOPT $POPT" 
+export QFDS="$QFDSSH $walltime -o $nthreads $INTEL2 -e $FDSMPI $QUEUE $OOPT $POPT" 
 if [ "$CHECKCASES" == "1" ]; then
   export QFDS="$SVNROOT/fds/Verification/scripts/Check_FDS_Cases.sh"
 fi
@@ -260,31 +284,49 @@ if [ "$BENCHMARK" == "1" ]; then
     ./FDS_Benchmark_Cases_single.sh
   fi
   if [ "$CHECKCASES" == "" ]; then
-    echo FDS benchmark cases submitted
+    echo Cases in FDS_Benchmark_Cases.sh submitted
   fi
 fi
 
 if [ "$CHECKCASES" == "1" ]; then
   export QFDS="$SVNROOT/fds/Verification/scripts/Check_FDS_Cases.sh"
 else
-  export QFDS="$QFDSSH $walltime -n $nthreads $INTEL2 -e $FDSMPI $QUEUE $OOPT $POPT" 
+  export QFDS="$QFDSSH $walltime -o $nthreads $INTEL2 -e $FDSMPI $QUEUE $OOPT $POPT" 
+fi
+
+cd $CURDIR
+cd ..
+if [ "$SUBSET" == "1" ]; then
+   ./FDS_Cases_Subset.sh
+   if [ "$CHECKCASES" == "" ]; then
+      echo Cases in FDS_Cases_Subset.sh submitted
+   fi
 fi
 
 cd $CURDIR
 cd ..
 if [ "$REGULAR" == "1" ]; then
-  ./FDS_Cases.sh
-  if [ "$CHECKCASES" == "" ]; then
-    echo FDS non-benchmark cases submitted
-  fi
+    ./FDS_Cases.sh
+   if [ "$CHECKCASES" == "" ]; then
+      echo Cases in FDS_Cases.sh submitted
+   fi
 fi
+
 cd $CURDIR
 cd ..
-if [ "$GEOMCASES" == "1" ]; then
-  ./GEOM_Cases.sh
-  if [ "$CHECKCASES" == "" ]; then
-    echo FDS geometry cases submitted
-  fi
+if [ "$RESTART" != "" ]; then
+    ./FDS_RESTART_Cases.sh 
+   if [ "$CHECKCASES" == "" ]; then
+      echo Cases in FDS_RESTART_Cases.sh submitted
+   fi
+fi
+
+if [ "$VALIDATION" != "" ]; then
+   cd $SVNROOT/fds/Validation
+    ./FDS_Val_Cases.sh 
+   if [ "$CHECKCASES" == "" ]; then
+      echo Cases in FDS_Val_Cases.sh submitted
+   fi
 fi
 
 cd $CURDIR
@@ -292,27 +334,12 @@ cd ..
 if [ "$INSPECTCASES" == "1" ]; then
   ./INSPECT_Cases.sh
   if [ "$CHECKCASES" == "" ]; then
-    echo FDS thread checking cases submitted
+     echo Cases in INSPECT_Cases.sh submitted
   fi
 fi
 
 cd $CURDIR
 cd ..
-if [ "$RERUN" == "1" ]; then
-  grep 'BAD TERMINATION' */*.log | awk -F':' '{print($1)}' | sort -u | awk -F'/' '{print($2)}' | awk -F'.' '{print($1".fds")}' > badcaselist
-  echo "#!/bin/bash" > RERUN_Cases.sh
-  grep -f badcaselist FDS_Cases.sh >> RERUN_Cases.sh
-  nlines=`cat RERUN_Cases.sh | wc -l`
-  if [ $nlines -gt 1 ]; then
-    echo warning the following cases failed with BAD TERMINATION errors. They were rerun
-    grep 'BAD TERMINATION' -A 2 */*.log 
-    chmod +x RERUN_Cases.sh
-    ./RERUN_Cases.sh
-    if [ "$CHECKCASES" == "" ]; then
-      echo "FDS cases that failed with BAD TERMINATION errors re-submitted"
-    fi
-  fi
-fi
 
 if [ "$CHECKCASES" == "" ]; then
   if [ "$WAIT" == "1" ]; then
