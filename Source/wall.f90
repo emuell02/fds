@@ -2953,7 +2953,7 @@ PYROLYSIS_PREDICTED_IF: IF (SF%PYROLYSIS_MODEL==PYROLYSIS_PREDICTED) THEN
                         RHO_DOT_TEMP(1:SF%N_MATL),RHO_TEMP(1:SF%N_MATL),RHO_S0,ONE_D%X(I-1),DT_BC-T_BC_SUB,&
                         M_DOT_G_PPP_ADJUST,M_DOT_G_PPP_ACTUAL,M_DOT_S_PPP,Q_S(I),Q_DOT_G_PPP,Q_DOT_O2_PPP,&
                         Q_DOT_PART,M_DOT_PART,T_BOIL_EFF,SOLID_CELL_INDEX=I,&
-                        R_DROP=R_SURF,LPU=U_SURF,LPV=V_SURF,LPW=W_SURF,I_INDEX=I,PART_INDEX=PART_INDEX)
+                        R_DROP=R_SURF,LPU=U_SURF,LPV=V_SURF,LPW=W_SURF,I_INDEX=I,PART_INDEX=PARTICLE_INDEX)
       ELSE
          CALL PYROLYSIS(SF%N_MATL,SF%MATL_INDEX,SURF_INDEX,ONE_D%IIG,ONE_D%JJG,ONE_D%KKG,ONE_D%TMP(I),ONE_D%TMP_F,ONE_D%IOR,&
                         RHO_DOT_TEMP(1:SF%N_MATL),RHO_TEMP(1:SF%N_MATL),RHO_S0,ONE_D%X(I-1),DT_BC-T_BC_SUB,&
@@ -3691,7 +3691,6 @@ ENDIF MASS_TRANSFER_1D
 ! Determine if the iterations are done, otherwise return to the top
 
 IF (T_BC_SUB>=DT_BC-TWO_EPSILON_EB) EXIT SUB_TIMESTEP_LOOP
->>>>>>> firemodels/master
 
 ONE_D%N_SUBSTEPS = ONE_D%N_SUBSTEPS + 1
 
@@ -3778,7 +3777,7 @@ REAL(EB),ALLOCATABLE :: NUADJ(:)
 REAL(EB) :: DTMP,REACTION_RATE,Y_O2,X_O2,Q_DOT_S_PPP,MW(N_MATS),Y_GAS(N_MATS),Y_SV(N_MATS),X_SV(N_MATS),X_L(N_MATS),&
             D_AIR,H_MASS,RE_L,SHERWOOD,MFLUX,MU_AIR,SC_AIR,U_TANG,RDN,B_NUMBER,TMP_G,LENGTH,U2,V2,W2,VEL,&
             RHO_DOT,DR,R_S_0,R_S_1,H_R,H_R_B,H_S_B,H_S,LENGTH_SCALE,SUM_X_MW,SUM_Y_GAS,SUM_Y_SV,SUM_Y_SV_SMIX(N_TRACKED_SPECIES),&
-            SUM_X_SV,X_L_SUM,RHO_DOT_EXTRA,NET_HEAT_FLUX,MFLUX_MAX,SIGMA_BETA_E,AERVE,VPRVC,CP,NUO2,NUCO,NUCO2,NUCHAR,CORCO2,Q_SML
+            SUM_X_SV,X_L_SUM,RHO_DOT_EXTRA,NET_HEAT_FLUX,MFLUX_MAX,SIGMA_BETA_E,AERVE,VPRVC,CP,NUO2,NUCO,NUCO2,NUCHAR,CORCO2,Q_SML,ALPHA_CHAR=0.5_EB
 LOGICAL :: LIQUID(N_MATS),SPEC_ID_ALREADY_USED(N_MATS),DO_EVAPORATION
 
 Q_DOT_S_PPP = 0._EB
@@ -4065,22 +4064,6 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
             VPRVC=LP%PWT*SF%LENGTH*PI*(SF%THICKNESS**2._EB)*RDX(IIG)*RRN(IIG)*RDY(JJG)*RDZ(KKG)
             ! Reaction rate in 1/s
 
-            ! !rm -> Remove particle if it's fully charred and char oxidation is not modeled
-            ! SFRHO_VEG_MIN  = 0.001_EB*SUM(SF%RHO_0(1:SF%N_CELLS_MAX+1,1))
-            ! SFRHO_CHAR_MIN = ML%NU_RESIDUE(1,J)*SFRHO_VEG_MIN
-            ! IF (ML%NU_O2(J) <= 0._EB) THEN 
-            !   IF(N==1 .AND. RHO_S(N) <= SFRHO_VEG_MIN) THEN  !remove particle if veg is fully charred
-            !     LAGRANGIAN_PARTICLE(PART_INDEX)%ONE_D%BURNAWAY = .TRUE.
-            ! !print '(A)','in fully charred'
-            !     RETURN
-            !   ELSEIF (N==3 .AND. RHO_S(N) <= SFRHO_CHAR_MIN) THEN !remove particle if char is fully oxidized
-            !     LAGRANGIAN_PARTICLE(PART_INDEX)%ONE_D%BURNAWAY = .TRUE.
-            ! !print '(A)','in fully oxidized'
-            !     RETURN
-            !   ENDIF
-            ! ENDIF
-            ! !rm <-
-
             ! Tech Guide: r_alpha,beta (1/s)
             REACTION_RATE = ML%A(J)*(RHO_S(N)/RHO_S0)**ML%N_S(J)*EXP(-ML%E(J)/(R0*TMP_S))
             ! power term
@@ -4097,7 +4080,7 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
                NUCO2=(2._EB*NUO2-1._EB)
                NUCHAR=(1-SUM(ML%NU_RESIDUE(:,J))) !amount of char that is composed of reacting carbon
 
-               NUADJ(O2_INDEX+1)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
+               NUADJ(O2_INDEX)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
 
                ! Get oxygen mass fraction
                ZZ_GET(1:N_TRACKED_SPECIES) = MAX(0._EB,ZZ(IIG,JJG,KKG,1:N_TRACKED_SPECIES))
@@ -4118,27 +4101,27 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
 
                ! compare available mass of char vs. oxygen for reaction
                ! currently operates under the assumption of single layer cylindrical particle
-               IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX+1)) THEN
+               IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX)) THEN
                   REACTION_RATE = REACTION_RATE * &
                                RHO_S(N)*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
                ELSE
-                  REACTION_RATE = REACTION_RATE*RHO(IIG,JJG,KKG)*Y_O2*SF%SURFACE_VOLUME_RATIO(SF%LAYER_INDEX(I_INDEX))* &
-                               (1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
+                  REACTION_RATE = REACTION_RATE*RHO(IIG,JJG,KKG)*Y_O2*(4._EB/LENGTH_SCALE)* &
+                               (1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX))
                ENDIF
                
                RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
 
                ! energy exchanges related to CO2
-               NUADJ(CO2_INDEX+1)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
-               Q_SML = RHO_DOT * NUADJ(CO2_INDEX+1)*-394.5_EB/44._EB*1E6_EB
-               Q_DOT_S_PPP = Q_DOT_S_PPP - ML%ALPHA_CHAR(J)*Q_SML
-               Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ML%ALPHA_CHAR(J))*Q_SML
+               NUADJ(CO2_INDEX)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
+               Q_SML = RHO_DOT * NUADJ(CO2_INDEX)*-394.5_EB/44._EB*1E6_EB
+               Q_DOT_S_PPP = Q_DOT_S_PPP - ALPHA_CHAR*Q_SML
+               Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ALPHA_CHAR)*Q_SML
                
                ! energy exchanges related to CO
-               NUADJ(CO_INDEX+1)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
-               Q_SML = RHO_DOT * NUADJ(CO_INDEX+1)*-110.5_EB/28._EB*1E6_EB
-               Q_DOT_S_PPP = Q_DOT_S_PPP - ML%ALPHA_CHAR(J)*Q_SML
-               Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ML%ALPHA_CHAR(J))*Q_SML
+               NUADJ(CO_INDEX)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
+               Q_SML = RHO_DOT * NUADJ(CO_INDEX)*-110.5_EB/28._EB*1E6_EB
+               Q_DOT_S_PPP = Q_DOT_S_PPP - ALPHA_CHAR*Q_SML
+               Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ALPHA_CHAR)*Q_SML
                
                ! bulk heat of reaction
                !Q_SML = RHO_DOT * -16000.0_EB*1.0E3_EB
@@ -4187,13 +4170,13 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
       
       TMP_G = TMP(IIG,JJG,KKG)
       DO NS=1,N_TRACKED_SPECIES  ! Tech Guide: m_dot_gamma'''
-         M_DOT_G_PPP_ADJUST(NS) = M_DOT_G_PPP_ADJUST(NS) + ML%ADJUST_BURN_RATE(NS,J)*NUADJ(NS,J)*RHO_DOT
-         M_DOT_G_PPP_ACTUAL(NS) = M_DOT_G_PPP_ACTUAL(NS) + NUADJ(NS,J)*RHO_DOT
+         M_DOT_G_PPP_ADJUST(NS) = M_DOT_G_PPP_ADJUST(NS) + ML%ADJUST_BURN_RATE(NS,J)*NUADJ(NS)*RHO_DOT
+         M_DOT_G_PPP_ACTUAL(NS) = M_DOT_G_PPP_ACTUAL(NS) + NUADJ(NS)*RHO_DOT
          ZZ_GET=0._EB
          ZZ_GET(NS)=1._EB
          CALL GET_SENSIBLE_ENTHALPY(ZZ_GET,H_S_B,TMP_S)
          CALL GET_SENSIBLE_ENTHALPY(ZZ_GET,H_S,TMP_G)
-         Q_DOT_G_PPP = Q_DOT_G_PPP + ML%ADJUST_BURN_RATE(NS,J)*NUADJ(NS,J)*RHO_DOT*(H_S-H_S_B)
+         Q_DOT_G_PPP = Q_DOT_G_PPP + ML%ADJUST_BURN_RATE(NS,J)*NUADJ(N)*RHO_DOT*(H_S-H_S_B)
       ENDDO
    
       DEALLOCATE(NUADJ)

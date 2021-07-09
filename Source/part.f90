@@ -1214,7 +1214,7 @@ IF (IN%ID/='null') THEN
    DO ND=1,N_DEVC
       DV => DEVICE(ND)
       IF (IN%ID==DV%INIT_ID .AND. IP==DV%POINT) THEN
-         IF (DV%MESH==NM .AND. DV%I==II .AND. DV%J==JJ .AND. DV%K==KK) THEN !only output when device is on a particle
+         !IF (DV%MESH==NM .AND. DV%I(1)==II .AND. DV%J(1)==JJ .AND. DV%K(1)==KK) THEN !only output when device is on a particle
             DV%LP_TAG = PARTICLE_TAG
             DV%PART_CLASS_INDEX = ILPC
             DV%MESH = NM
@@ -1226,7 +1226,7 @@ IF (IN%ID/='null') THEN
                IF (ABS(IN%DX)<TWO_EPSILON_EB .AND. ABS(IN%DY)>TWO_EPSILON_EB .AND. ABS(IN%DZ)<TWO_EPSILON_EB) DV%LINE_COORD_CODE = 2
                IF (ABS(IN%DX)<TWO_EPSILON_EB .AND. ABS(IN%DY)<TWO_EPSILON_EB .AND. ABS(IN%DZ)>TWO_EPSILON_EB) DV%LINE_COORD_CODE = 3
             ENDIF
-         ENDIF
+         !ENDIF
       ENDIF
    ENDDO
 
