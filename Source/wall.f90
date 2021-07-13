@@ -4074,13 +4074,13 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
 
                ! temperature dependent CO/CO2 yeild for char oxidation
                ! following Mendes et al. 2008, JAAP
-               CORCO2=2500._EB*EXP(-6240/ONE_D%TMP_F)
+               CORCO2=2500._EB*EXP(-6240/TMP_S)
                NUO2=(2._EB+CORCO2)/(2._EB*CORCO2+2._EB)
                NUCO=(2._EB-2._EB*NUO2)
                NUCO2=(2._EB*NUO2-1._EB)
                NUCHAR=(1-SUM(ML%NU_RESIDUE(:,J))) !amount of char that is composed of reacting carbon
 
-               NUADJ(O2_INDEX)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
+               NUADJ(O2_INDEX+1)=-NUCHAR*NUO2*32._EB/12._EB !mass of O2 consumed per mass C 
 
                ! Get oxygen mass fraction
                ZZ_GET(1:N_TRACKED_SPECIES) = MAX(0._EB,ZZ(IIG,JJG,KKG,1:N_TRACKED_SPECIES))
@@ -4101,25 +4101,25 @@ MATERIAL_LOOP: DO N=1,N_MATS  ! Loop over all materials in the cell (alpha subsc
 
                ! compare available mass of char vs. oxygen for reaction
                ! currently operates under the assumption of single layer cylindrical particle
-               IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX)) THEN
+               IF (RHO_S(N)*VPRVC .LT. -RHO(IIG,JJG,KKG)*Y_O2/NUADJ(O2_INDEX+1)) THEN
                   REACTION_RATE = REACTION_RATE * &
                                RHO_S(N)*SIGMA_BETA_E*(1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0)
                ELSE
                   REACTION_RATE = REACTION_RATE*RHO(IIG,JJG,KKG)*Y_O2*(4._EB/LENGTH_SCALE)* &
-                               (1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX))
+                               (1._EB+ML%BETA_CHAR(J)*SQRT(RE_L))/(RHO_S0*-NUADJ(O2_INDEX+1))
                ENDIF
                
                RHO_DOT  = MIN(RHO_S0*REACTION_RATE , RHO_S(N)/DT_BC)  ! Tech Guide: rho_s(0)*r_alpha,beta kg/m3/s
 
                ! energy exchanges related to CO2
-               NUADJ(CO2_INDEX)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
-               Q_SML = RHO_DOT * NUADJ(CO2_INDEX)*-394.5_EB/44._EB*1E6_EB
+               NUADJ(CO2_INDEX+1)=NUCHAR*NUCO2*44._EB/12._EB !mass of CO2 produced per mass C
+               Q_SML = RHO_DOT * NUADJ(CO2_INDEX+1)*-394.5_EB/44._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - ALPHA_CHAR*Q_SML
                Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ALPHA_CHAR)*Q_SML
                
                ! energy exchanges related to CO
-               NUADJ(CO_INDEX)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
-               Q_SML = RHO_DOT * NUADJ(CO_INDEX)*-110.5_EB/28._EB*1E6_EB
+               NUADJ(CO_INDEX+1)=NUCHAR*NUCO*28._EB/12._EB !mass of CO produced per mass C 
+               Q_SML = RHO_DOT * NUADJ(CO_INDEX+1)*-110.5_EB/28._EB*1E6_EB
                Q_DOT_S_PPP = Q_DOT_S_PPP - ALPHA_CHAR*Q_SML
                Q_DOT_G_PPP = Q_DOT_G_PPP - (1._EB-ALPHA_CHAR)*Q_SML
 
